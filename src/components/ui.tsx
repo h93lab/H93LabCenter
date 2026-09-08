@@ -81,7 +81,7 @@ export function ErrorBox({
       <AlertCircle size={18} />
       <span>{error instanceof Error ? error.message : String(error)}</span>
       {retry && (
-        <button className="button small" onClick={retry}>
+        <button type="button" className="button small" onClick={retry}>
           Try again
         </button>
       )}
@@ -127,6 +127,7 @@ export function Dialog({
       <div className="dialog-head">
         <h2 id={titleId}>{title}</h2>
         <button
+          type="button"
           className="icon-button"
           onClick={onClose}
           aria-label="Close dialog"
@@ -178,6 +179,7 @@ export function Tabs({
     >
       {items.map((item) => (
         <button
+          type="button"
           key={item}
           id={`${idPrefix}-tab-${item.toLowerCase().replaceAll(" ", "-")}`}
           aria-controls={`${idPrefix}-panel`}
@@ -226,6 +228,7 @@ export function Score({
 }) {
   return (
     <button
+      type="button"
       className="score"
       onClick={onClick}
       aria-label={label + ": " + (value ?? "unknown")}

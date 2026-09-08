@@ -18,7 +18,6 @@ import {
   ListTodo,
   BrainCircuit,
   SlidersHorizontal,
-  ChevronDown,
   Search,
   Sun,
   Moon,
@@ -204,7 +203,6 @@ export function Shell() {
             <b>Personal workspace</b>
             <small>Mobile opportunity lab</small>
           </span>
-          <ChevronDown size={14} />
         </div>
         <nav>
           {groups.map((group) => (
@@ -260,14 +258,14 @@ export function Shell() {
           >
             <Menu size={21} />
           </button>
-          <div className="breadcrumb">
+          <nav className="breadcrumb" aria-label="Breadcrumb">
             Workspace <span>/</span>
             <b>
               {human(
                 location.pathname.split("/").filter(Boolean)[0] || "Overview",
               )}
             </b>
-          </div>
+          </nav>
           <div className="topbar-end">
             <button
               className="search-trigger"

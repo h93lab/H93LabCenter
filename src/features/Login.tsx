@@ -62,7 +62,7 @@ export default function Login() {
         </small>
       </div>
       <div className="login-form-wrap">
-        <form className="login-form" onSubmit={submit}>
+        <form className="login-form" onSubmit={submit} aria-busy={busy}>
           <span className="login-shield">
             <ShieldCheck size={25} />
           </span>
@@ -78,6 +78,8 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={busy}
+              aria-invalid={!!error}
+              aria-describedby={error ? "login-error" : undefined}
               placeholder="you@example.com"
             />
           </label>
@@ -90,11 +92,13 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={busy}
+              aria-invalid={!!error}
+              aria-describedby={error ? "login-error" : undefined}
               placeholder="Enter your password"
             />
           </label>
           {error && (
-            <p className="form-error" role="alert">
+            <p className="form-error" id="login-error" role="alert">
               {error}
             </p>
           )}

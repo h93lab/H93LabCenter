@@ -17,6 +17,7 @@ import {
   Dialog,
   Empty,
 } from "../components/ui";
+import { AccountSettings } from "./AccountSettings";
 import {
   appWeights,
   gameWeights,
@@ -89,28 +90,32 @@ export default function Settings() {
         }
       >
         {saved && (
-          <span className="saved">
+          <span className="saved" role="status" aria-live="polite">
             <Check size={16} />
             Saved
           </span>
         )}
       </PageHeader>
       <div className="tabs">
-        {(aiPage ? ["models", "prompts", "usage"] : settingsTabs).map((t) => (
-          <Link
-            key={t}
-            to={
-              aiPage ? (t === "models" ? "/ai" : "/ai/" + t) : "/settings/" + t
-            }
-            className={
-              section === t || (section === "ai" && t === "models")
-                ? "active"
-                : ""
-            }
-          >
-            {human(t.replaceAll("-", " "))}
-          </Link>
-        ))}
+        {(aiPage ? ["models", "prompts", "usage"] : settingsTabs).map((t) => {
+          const active = section === t || (section === "ai" && t === "models");
+          return (
+            <Link
+              key={t}
+              to={
+                aiPage
+                  ? t === "models"
+                    ? "/ai"
+                    : "/ai/" + t
+                  : "/settings/" + t
+              }
+              className={active ? "active" : ""}
+              aria-current={active ? "page" : undefined}
+            >
+              {human(t.replaceAll("-", " "))}
+            </Link>
+          );
+        })}
       </div>
       {error && <ErrorBox error={error} />}
       {!aiPage && section === "research" && (
@@ -477,27 +482,10 @@ export default function Settings() {
         </section>
       )}
       {!aiPage && section === "account" && (
-        <form
-          className="card settings-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            save("/profile", {
-              display_name: new FormData(e.currentTarget).get("name"),
-            });
-          }}
-        >
-          <h2>Your account</h2>
-          <label>
-            Display name
-            <input
-              name="name"
-              defaultValue={d.profile.display_name || ""}
-              maxLength={80}
-              required
-            />
-          </label>
-          <button className="button primary">Save account</button>
-        </form>
+        <AccountSettings
+          displayName={d.profile.display_name || ""}
+          onSaveProfile={(name) => save("/profile", { display_name: name })}
+        />
       )}
       {aiPage && !["prompts", "usage"].includes(section) && (
         <section className="card">

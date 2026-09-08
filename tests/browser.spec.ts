@@ -84,3 +84,59 @@ test("owner workspace, data routes, versioned documents, prototype and responsiv
   expect(await page.locator("html").getAttribute("class")).toBe(theme);
   expect(errors).toEqual([]);
 });
+
+test("account settings are responsive and validate email and password changes", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page.getByLabel("Email address").fill(owner.email);
+  await page.getByLabel("Password", { exact: true }).fill(owner.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Workspace overview" }),
+  ).toBeVisible();
+
+  await page.goto("/settings/account");
+  await expect(
+    page.getByRole("heading", { name: "Email address", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Password", exact: true }),
+  ).toBeVisible();
+
+  await page.getByLabel("New email address").fill(owner.email.toUpperCase());
+  await page
+    .getByLabel("Current password", { exact: true })
+    .first()
+    .fill(owner.password);
+  await page.getByRole("button", { name: "Update email" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Enter a different email address.",
+  );
+
+  const passwordForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Update password" }),
+  });
+  await passwordForm
+    .getByLabel("Current password", { exact: true })
+    .fill(owner.password);
+  await passwordForm
+    .getByLabel("New password", { exact: true })
+    .fill("a-secure-new-password");
+  await passwordForm
+    .getByLabel("Confirm new password", { exact: true })
+    .fill("a-different-password");
+  await passwordForm.getByRole("button", { name: "Update password" }).click();
+  await expect(passwordForm.getByRole("alert")).toHaveText(
+    "The new passwords do not match.",
+  );
+
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  }
+});
