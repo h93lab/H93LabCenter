@@ -531,9 +531,11 @@ export default function Settings() {
                     <td>
                       <Badge
                         value={
-                          r.enabled && r.primary_model
-                            ? "Configured"
-                            : "Not configured"
+                          !r.enabled
+                            ? "Disabled"
+                            : r.primary_model
+                              ? "Configured"
+                              : "Not configured"
                         }
                       />
                     </td>
