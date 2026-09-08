@@ -81,7 +81,7 @@ create table public.signal_clusters (
   cluster_key text,
   title text not null,
   summary text not null,
-  embedding vector,
+  embedding extensions.vector,
   confidence numeric(5,2) not null default 0 check (confidence between 0 and 100),
   created_at timestamptz not null default now()
 );
@@ -106,7 +106,7 @@ create table public.opportunities (
   app_or_game public.app_or_game not null,
   category_id uuid references public.categories(id),
   normalized_key text,
-  embedding vector,
+  embedding extensions.vector,
   lifecycle_status text not null default 'discovered',
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),

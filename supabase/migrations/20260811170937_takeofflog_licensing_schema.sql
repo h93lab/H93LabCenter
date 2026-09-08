@@ -1,0 +1,3 @@
+-- This schema already exists in the shared hosted project.
+-- Keep the remote migration in local history so H93Lab Center migrations can
+-- be pushed without modifying the existing takeofflog or appscraper schemas.
