@@ -1,5 +1,9 @@
 # H93Lab Center
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fh93lab%2FH93LabCenter&env=VITE_SUPABASE_URL%2CVITE_SUPABASE_PUBLISHABLE_KEY%2CVITE_API_URL&envDescription=Browser-safe%20configuration%20for%20your%20prepared%20Supabase%20backend.%20Do%20not%20enter%20server%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fh93lab%2FH93LabCenter%2Fblob%2Fmain%2Fdocs%2F07-implementation%2FDEPLOYMENT.md)
+
+Deploy the frontend using your configured Supabase backend. The button asks for three browser-safe environment variables; database setup, owner provisioning and server secrets are separate. See the [deployment guide](docs/07-implementation/DEPLOYMENT.md).
+
 A new personal mobile-opportunity research workspace. React + Vite frontend; Supabase Auth, Postgres, Queues, Storage and Edge Functions backend. OpenRouter performs structured analysis and blueprint generation. The product stops at a validated, versioned Flutter development specification and interactive prototype.
 
 ## Local development
@@ -65,12 +69,12 @@ Initial public adapters: Apple App Store listings/review feeds, Hacker News and 
 
 ## Production deployment
 
-See `docs/07-implementation/DEPLOYMENT.md` and `docs/07-implementation/RUNBOOK.md`. Vercel hosts only the frontend. Supabase hosts the privileged API and worker. Disable public signup; provision the owner through Supabase Auth administration. Configure exact CORS origin and server secrets before enabling Cron. Never expose a database service key as a Vite environment variable.
+See the [deployment guide](docs/07-implementation/DEPLOYMENT.md) and [operations runbook](docs/07-implementation/RUNBOOK.md). Vercel hosts only the frontend. Supabase hosts the privileged API and worker. Disable public signup; provision the owner through Supabase Auth administration. Configure exact CORS origin and server secrets before enabling Cron. Never expose a database service key as a Vite environment variable.
 
 ## Edge runtime verification
 
 Run `npm run edge:build` before serving/deploying the function. This bundles pinned dependencies locally; the runtime does not need to download npm dependencies on a cold request. The configured entry point is `supabase/functions/center/main.generated.ts`, regenerated from the source entrypoint and ignored by Git. Run `npm run edge:serve` to start a resource-limited local Edge container on port 55325. It copies the built code into the container instead of mounting macOS files, and reads server secrets privately from `.env.server`. This avoids a reproducible OrbStack/CLI serve hang observed on this machine. For standard Docker environments, `edge:serve:cli` remains available with server-only secrets in `.local/edge.env`. Set `LOCAL_WORKER_ENABLED=0` when running the Node API if the Edge worker is driving the same queue.
 
-See `docs/07-implementation/STATUS.md` for all 64 task states and `VERIFICATION.md` for observed checks and remaining external verification.
+See `docs/07-implementation/STATUS.md` for all 64 task states and `docs/07-implementation/VERIFICATION.md` for observed checks and remaining external verification.
 
 After a successful local Edge research run, `npm run cron:local` stores the local worker endpoint/key in Vault and schedules the worker every 15 seconds and the timezone dispatcher every 15 minutes. It preserves the owner's daily research preference. Hosted Cron is configured separately after production verification.
