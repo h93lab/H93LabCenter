@@ -23,6 +23,33 @@ export function callReservation(
     throw Error("CALL_BUDGET_LIMIT");
   return maximum;
 }
+export function constrainEvidenceSchema(
+  schema: Record<string, unknown>,
+  allowed: Set<string>,
+) {
+  const constrain = (node: any) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "object" && node.properties) {
+      node.required = Object.keys(node.properties);
+      node.additionalProperties = false;
+    }
+    if (node.properties?.evidence_ids && allowed.size)
+      node.properties.evidence_ids.items = {
+        type: "string",
+        enum: [...allowed],
+      };
+    if (node.properties?.evidence_id && allowed.size)
+      node.properties.evidence_id = {
+        ...node.properties.evidence_id,
+        type: "string",
+        enum: [...allowed],
+      };
+    for (const value of Object.values(node))
+      if (typeof value === "object") constrain(value);
+  };
+  constrain(schema);
+  return schema;
+}
 let catalog: Row[] = [];
 let catalogAt = 0;
 export async function models() {
@@ -95,21 +122,7 @@ export async function ai<T>(
         ? evidence.map((e: Row) => e.id).filter(Boolean)
         : [],
     );
-    const constrain = (node: any) => {
-      if (!node || typeof node !== "object") return;
-      if (node.type === "object" && node.properties) {
-        node.required = Object.keys(node.properties);
-        node.additionalProperties = false;
-      }
-      if (node.properties?.evidence_ids && allowed.size)
-        node.properties.evidence_ids.items = {
-          type: "string",
-          enum: [...allowed],
-        };
-      for (const value of Object.values(node))
-        if (typeof value === "object") constrain(value);
-    };
-    constrain(jsonSchema);
+    constrainEvidenceSchema(jsonSchema, allowed);
     messages[1].content +=
       "\nOUTPUT JSON SCHEMA (all required fields must be present, including nested concepts):\n" +
       JSON.stringify(jsonSchema);

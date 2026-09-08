@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { unzipSync } from "fflate";
-import { callReservation } from "../supabase/functions/_shared/ai.ts";
+import {
+  callReservation,
+  constrainEvidenceSchema,
+} from "../supabase/functions/_shared/ai.ts";
 import {
   providerHttpError,
   retryable,
@@ -65,6 +68,33 @@ test("zero budgets remain zero while verified free models can reserve zero", () 
   assert.throws(() =>
     callReservation(100, 100, { prompt: null, completion: 0 }, 1),
   );
+});
+
+test("AI schemas constrain singular and plural evidence references", () => {
+  const schema: any = {
+    type: "object",
+    properties: {
+      evidence_ids: { type: "array", items: { type: "string" } },
+      links: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { evidence_id: { type: "string" } },
+        },
+      },
+    },
+  };
+
+  constrainEvidenceSchema(schema, new Set(["evidence-a", "evidence-b"]));
+
+  assert.deepEqual(schema.properties.evidence_ids.items.enum, [
+    "evidence-a",
+    "evidence-b",
+  ]);
+  assert.deepEqual(schema.properties.links.items.properties.evidence_id.enum, [
+    "evidence-a",
+    "evidence-b",
+  ]);
 });
 test("429 and timeout retries are classified with bounded Retry-After", () => {
   const e = providerHttpError(429, "180");
