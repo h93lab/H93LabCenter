@@ -39,3 +39,11 @@ New application workspace: H93LabCenter. Independent local Supabase project: h93
 ## Pending external verification
 
 Production Vercel and Supabase deployment requires account access for publishing and server-secret setup. CLI sessions were not authenticated at inspection. Figma receipt support does not establish that a user has imported a file until an actual plugin receipt is provided. Production Cron remains disabled until the hosted worker is verified. Local worker/dispatcher Cron is enabled after successful local Edge research.
+
+## Review implementation verification — 2026-09-08
+
+The new acceptance record is [REVIEW_IMPLEMENTATION_RESULT.md](REVIEW_IMPLEMENTATION_RESULT.md). It supersedes the earlier test counts: 20 unit/contract checks and 13 integration groups now pass. Large-history coverage includes 106 versions/scores and concurrent run-stat merges. All 5 browser tests pass. New browser coverage exercises decision comparison, sourced detail panels, CSV/JSON preview and scoped zero-budget input.
+
+A scoped Edge/Cron run collected 34 real evidence items, including 6 Apple review entries; no review clusters were generated from that sample. Two unsupported risk judgments were rejected without partial recommendations. A strengthened structured contract succeeded on the third bounded attempt. Total run cost $0.0632; the concept identity and published snapshot were preserved.
+
+A separately recorded deterministic trace-link repair produced version 3. It preserved product behavior and all structured entities, passed real independent AI review and every current deterministic/export gate, then published with a prebuilt private ZIP. Versions 1 and 2 remain immutable. The local database linter reports no errors and one unused-parameter warning in center_go; hosted advisors remain an external check.

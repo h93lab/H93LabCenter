@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { ArrowRight, Inbox, LoaderCircle, X, AlertCircle } from "lucide-react";
 import { human } from "../lib/client";
 export function Badge({ value }: { value: unknown }) {
@@ -100,19 +100,32 @@ export function Dialog({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const returnFocus = useRef(
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null,
+  );
+  const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
     dialog?.showModal();
-    return () => dialog?.close();
+    return () => {
+      dialog?.close();
+      queueMicrotask(() => {
+        if (dialog?.isConnected && dialog.open) return;
+        if (returnFocus.current?.isConnected) returnFocus.current.focus();
+      });
+    };
   }, []);
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       className={wide ? "dialog wide" : "dialog"}
       onCancel={onClose}
     >
       <div className="dialog-head">
-        <h2>{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           className="icon-button"
           onClick={onClose}
@@ -123,6 +136,61 @@ export function Dialog({
       </div>
       {children}
     </dialog>
+  );
+}
+export function Tabs({
+  items,
+  value,
+  onChange,
+  label,
+  idPrefix = "view",
+}: {
+  items: string[];
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  idPrefix?: string;
+}) {
+  return (
+    <div
+      className="tabs"
+      role="tablist"
+      aria-label={label}
+      onKeyDown={(event) => {
+        const index = items.indexOf(value);
+        const next =
+          event.key === "ArrowRight"
+            ? (index + 1) % items.length
+            : event.key === "ArrowLeft"
+              ? (index - 1 + items.length) % items.length
+              : event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? items.length - 1
+                  : -1;
+        if (next < 0) return;
+        event.preventDefault();
+        onChange(items[next]);
+        event.currentTarget
+          .querySelectorAll<HTMLButtonElement>('[role="tab"]')
+          [next]?.focus();
+      }}
+    >
+      {items.map((item) => (
+        <button
+          key={item}
+          id={`${idPrefix}-tab-${item.toLowerCase().replaceAll(" ", "-")}`}
+          aria-controls={`${idPrefix}-panel`}
+          role="tab"
+          aria-selected={value === item}
+          tabIndex={value === item ? 0 : -1}
+          className={value === item ? "active" : ""}
+          onClick={() => onChange(item)}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
   );
 }
 export function Metric({

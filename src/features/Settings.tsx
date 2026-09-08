@@ -184,7 +184,7 @@ export default function Settings() {
                 min="0"
                 max="10"
                 step="0.05"
-                defaultValue={s.research_config.run_budget || 0.5}
+                defaultValue={s.research_config.run_budget ?? 0.5}
               />
             </label>
             <label>
@@ -650,6 +650,11 @@ export default function Settings() {
                 primary_model: f.get("model"),
                 enabled: f.get("enabled") === "on",
                 max_cost_per_call_usd: Number(f.get("cost")),
+                daily_call_limit: Number(f.get("call_limit")),
+                daily_budget_usd:
+                  String(f.get("role_daily") || "").trim() === ""
+                    ? null
+                    : Number(f.get("role_daily")),
                 fallback_models: String(f.get("fallbacks"))
                   .split(",")
                   .map((s) => s.trim())
@@ -691,10 +696,10 @@ export default function Settings() {
                 <input
                   name="cost"
                   type="number"
-                  min="0.001"
+                  min="0"
                   max="5"
                   step="0.001"
-                  defaultValue={editRole.max_cost_per_call_usd || 0.15}
+                  defaultValue={editRole.max_cost_per_call_usd ?? 0.15}
                 />
               </label>
               <label>
@@ -715,10 +720,37 @@ export default function Settings() {
                   min="0"
                   max="2"
                   step="0.05"
-                  defaultValue={editRole.settings?.temperature || 0.15}
+                  defaultValue={editRole.settings?.temperature ?? 0.15}
                 />
               </label>
             </div>
+            <label>
+              Daily call limit
+              <input
+                name="call_limit"
+                type="number"
+                min="1"
+                max="10000"
+                step="1"
+                required
+                defaultValue={editRole.daily_call_limit ?? 200}
+              />
+            </label>
+            <label>
+              Daily role budget (USD, blank uses workspace limit)
+              <input
+                name="role_daily"
+                type="number"
+                min="0"
+                max="100"
+                step="0.001"
+                defaultValue={editRole.daily_budget_usd ?? ""}
+              />
+              <small className="muted">
+                Zero blocks paid calls for this role. Workspace and run budgets
+                still apply.
+              </small>
+            </label>
             <label className="check-label">
               <input
                 type="checkbox"

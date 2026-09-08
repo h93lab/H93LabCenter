@@ -93,51 +93,106 @@
       }
     },
     "risks": {
+      "minItems": 7,
+      "maxItems": 7,
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "rule": {
-            "type": "string",
-            "minLength": 1
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "enum": [
+                  "prohibited",
+                  "unavailable_dependency",
+                  "unsustainable_economics",
+                  "no_credible_wedge",
+                  "solo_maintenance",
+                  "platform_policy",
+                  "safety_liability"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "const": "hard"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1
+              },
+              "result": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail"
+                ]
+              },
+              "evidence_ids": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              }
+            },
+            "required": [
+              "rule",
+              "severity",
+              "rationale",
+              "result",
+              "evidence_ids"
+            ],
+            "additionalProperties": false
           },
-          "result": {
-            "type": "string",
-            "enum": [
-              "pass",
-              "fail",
-              "unknown"
-            ]
-          },
-          "severity": {
-            "type": "string",
-            "enum": [
-              "hard",
-              "warning"
-            ]
-          },
-          "rationale": {
-            "type": "string",
-            "minLength": 1
-          },
-          "evidence_ids": {
-            "minItems": 1,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            }
+          {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "enum": [
+                  "prohibited",
+                  "unavailable_dependency",
+                  "unsustainable_economics",
+                  "no_credible_wedge",
+                  "solo_maintenance",
+                  "platform_policy",
+                  "safety_liability"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "const": "hard"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1
+              },
+              "result": {
+                "type": "string",
+                "const": "unknown"
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              }
+            },
+            "required": [
+              "rule",
+              "severity",
+              "rationale",
+              "result",
+              "evidence_ids"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "rule",
-          "result",
-          "severity",
-          "rationale",
-          "evidence_ids"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
     "competitors": {

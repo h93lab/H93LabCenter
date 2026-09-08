@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, Link, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard,
@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, supabase, human } from "../lib/client";
-import { Dialog, ErrorBox } from "../components/ui";
+import { Dialog, Empty, ErrorBox, Loading } from "../components/ui";
 const groups: {
   name: string;
   items: [string, string, typeof LayoutDashboard][];
@@ -71,6 +71,11 @@ export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const navigation = useRef<HTMLElement>(null);
+  const navigationTrigger = useRef<HTMLButtonElement>(null);
+  const [compact, setCompact] = useState(
+    () => matchMedia("(max-width: 950px)").matches,
+  );
   const [collapsed, setCollapsed] = useState(false),
     [mobile, setMobile] = useState(false),
     [search, setSearch] = useState(false),
@@ -100,6 +105,47 @@ export function Shell() {
     setMobile(false);
   }, [location.pathname]);
   useEffect(() => {
+    const media = matchMedia("(max-width: 950px)");
+    const update = () => {
+      setCompact(media.matches);
+      if (!media.matches) setMobile(false);
+    };
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!mobile || !compact) return;
+    const element = navigation.current;
+    const focusable = () => [
+      ...(element?.querySelectorAll<HTMLElement>(
+        "a[href],button:not([disabled])",
+      ) || []),
+    ];
+    focusable()[0]?.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobile(false);
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable(),
+        first = items[0],
+        last = items.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    element?.addEventListener("keydown", trap);
+    return () => {
+      element?.removeEventListener("keydown", trap);
+      navigationTrigger.current?.focus();
+    };
+  }, [mobile, compact]);
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
@@ -114,6 +160,10 @@ export function Shell() {
     queryFn: () => api("/table/ideas?q=" + encodeURIComponent(term)),
     enabled: search && term.length > 1,
   });
+  const pages = groups
+    .flatMap((group) => group.items)
+    .filter(([label]) => label.toLowerCase().includes(term.toLowerCase()))
+    .slice(0, 5);
   return (
     <div
       className={
@@ -122,7 +172,24 @@ export function Shell() {
         (mobile ? "mobile-open" : "")
       }
     >
-      <aside className="sidebar">
+      <aside
+        ref={navigation}
+        id="workspace-navigation"
+        className="sidebar"
+        inert={compact && !mobile}
+        role={compact && mobile ? "dialog" : undefined}
+        aria-modal={compact && mobile ? true : undefined}
+        aria-label="Workspace navigation"
+      >
+        {compact && mobile && (
+          <button
+            className="icon-button drawer-close"
+            aria-label="Close navigation"
+            onClick={() => setMobile(false)}
+          >
+            ×
+          </button>
+        )}
         <Link to="/" className="brand">
           <span className="brand-mark">
             H<span>93</span>
@@ -174,7 +241,7 @@ export function Shell() {
           onClick={() => setMobile(false)}
         />
       )}
-      <main className="main">
+      <main className="main" inert={compact && mobile}>
         <header className="topbar">
           <button
             className="icon-button desktop-only"
@@ -184,8 +251,11 @@ export function Shell() {
             <PanelLeftClose size={19} />
           </button>
           <button
+            ref={navigationTrigger}
             className="icon-button mobile-only"
             aria-label="Open navigation"
+            aria-expanded={mobile}
+            aria-controls="workspace-navigation"
             onClick={() => setMobile(true)}
           >
             <Menu size={21} />
@@ -199,7 +269,11 @@ export function Shell() {
             </b>
           </div>
           <div className="topbar-end">
-            <button className="search-trigger" onClick={() => setSearch(true)}>
+            <button
+              className="search-trigger"
+              aria-label="Search intelligence"
+              onClick={() => setSearch(true)}
+            >
               <Search size={16} />
               <span>Search intelligence…</span>
               <kbd>
@@ -256,24 +330,19 @@ export function Shell() {
         <Dialog title="Search intelligence" onClose={() => setSearch(false)}>
           <input
             autoFocus
+            aria-label="Search ideas or pages"
             placeholder="Search ideas or pages…"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
           />
           <div className="search-results">
-            {groups
-              .flatMap((g) => g.items)
-              .filter(([label]) =>
-                label.toLowerCase().includes(term.toLowerCase()),
-              )
-              .slice(0, 5)
-              .map(([label, path, Icon]) => (
-                <Link key={path} to={path} onClick={() => setSearch(false)}>
-                  <Icon size={17} />
-                  {label}
-                  <small>Page</small>
-                </Link>
-              ))}
+            {pages.map(([label, path, Icon]) => (
+              <Link key={path} to={path} onClick={() => setSearch(false)}>
+                <Icon size={17} />
+                {label}
+                <small>Page</small>
+              </Link>
+            ))}
             {result.data?.items?.map((x: any) => (
               <Link
                 key={x.id}
@@ -285,6 +354,24 @@ export function Shell() {
                 <small>Idea</small>
               </Link>
             ))}
+            {term.length > 1 && result.isFetching && <Loading />}
+            {result.error && (
+              <ErrorBox error={result.error} retry={() => result.refetch()} />
+            )}
+            {!result.isFetching &&
+              !result.error &&
+              term.length > 1 &&
+              !pages.length &&
+              !result.data?.items?.length && (
+                <Empty
+                  title="No matching ideas or pages"
+                  text="Try another title or clear your search."
+                >
+                  <button className="button small" onClick={() => setTerm("")}>
+                    Clear search
+                  </button>
+                </Empty>
+              )}
           </div>
         </Dialog>
       )}

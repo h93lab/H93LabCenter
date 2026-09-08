@@ -118,6 +118,20 @@ const routes: Record<string, [string, string, string]> = {
   ],
 };
 export default function Explorer() {
+  const { pathname } = useLocation();
+  return [
+    "/ideas",
+    "/ideas/shortlist",
+    "/ideas/watchlist",
+    "/ideas/passed",
+    "/ideas/killed",
+  ].includes(pathname) ? (
+    <DecisionExplorer />
+  ) : (
+    <RecordsExplorer />
+  );
+}
+function RecordsExplorer() {
   const loc = useLocation();
   const [params, setParams] = useSearchParams();
   const [inspect, setInspect] = useState<Row | null>(null),
@@ -459,6 +473,398 @@ export default function Explorer() {
       )}
       {research && <ResearchDialog onClose={() => setResearch(false)} />}
     </>
+  );
+}
+function DecisionExplorer() {
+  const { pathname } = useLocation();
+  const [params, setParams] = useSearchParams();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [compare, setCompare] = useState(false);
+  const bootstrap = useQuery({
+    queryKey: ["bootstrap"],
+    queryFn: () => api("/bootstrap"),
+  });
+  const query = new URLSearchParams(params);
+  const disposition = pathname.endsWith("shortlist")
+    ? "shortlisted"
+    : pathname.endsWith("watchlist")
+      ? "watching"
+      : pathname.endsWith("passed")
+        ? "passed"
+        : undefined;
+  if (disposition) query.set("disposition", disposition);
+  if (pathname.endsWith("killed")) query.set("recommendation", "KILLED");
+  const q = useQuery({
+    queryKey: ["decisions", query.toString()],
+    queryFn: () => api("/decisions?" + query),
+    refetchInterval: 10000,
+  });
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    if (key !== "page") next.set("page", "0");
+    setParams(next);
+  };
+  return (
+    <>
+      <PageHeader
+        eyebrow="DECISION WORKSPACE"
+        title={routes[pathname][1]}
+        description="Compare evidence, confidence and effort before committing to your next build."
+      >
+        <button
+          className="button"
+          disabled={selected.length < 2}
+          onClick={() => setCompare(true)}
+        >
+          Compare {selected.length || "ideas"}
+        </button>
+        {!!selected.length && (
+          <button className="button" onClick={() => setSelected([])}>
+            Clear selection
+          </button>
+        )}
+      </PageHeader>
+      <section className="card">
+        <div className="decision-filters">
+          <label>
+            Search ideas
+            <input
+              value={params.get("q") || ""}
+              onChange={(e) => setFilter("q", e.target.value)}
+              placeholder="Problem or product"
+            />
+          </label>
+          <label>
+            Market
+            <select
+              value={params.get("market") || ""}
+              onChange={(e) => setFilter("market", e.target.value)}
+            >
+              <option value="">Latest researched market</option>
+              {bootstrap.data?.markets?.map((m: Row) => (
+                <option key={m.id} value={m.code}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Category
+            <select
+              value={params.get("category") || ""}
+              onChange={(e) => setFilter("category", e.target.value)}
+            >
+              <option value="">All categories</option>
+              {bootstrap.data?.categories?.map((c: Row) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Kind
+            <select
+              value={params.get("kind") || ""}
+              onChange={(e) => setFilter("kind", e.target.value)}
+            >
+              <option value="">Apps and games</option>
+              <option value="app">Apps</option>
+              <option value="game">Games</option>
+            </select>
+          </label>
+          <label>
+            Recommendation
+            <select
+              value={params.get("recommendation") || ""}
+              disabled={pathname.endsWith("killed")}
+              onChange={(e) => setFilter("recommendation", e.target.value)}
+            >
+              <option value="">All recommendations</option>
+              {[
+                "STRONG_BUILD",
+                "BUILD",
+                "VALIDATE_FIRST",
+                "WATCH",
+                "PASS",
+                "KILLED",
+              ].map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Disposition
+            <select
+              value={disposition || params.get("disposition") || ""}
+              disabled={!!disposition}
+              onChange={(e) => setFilter("disposition", e.target.value)}
+            >
+              <option value="">All dispositions</option>
+              {[
+                "undecided",
+                "shortlisted",
+                "watching",
+                "passed",
+                "archived",
+                "go",
+              ].map((x) => (
+                <option key={x} value={x}>
+                  {human(x)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Minimum score
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={params.get("min_score") || ""}
+              onChange={(e) => setFilter("min_score", e.target.value)}
+            />
+          </label>
+          <label>
+            Minimum confidence
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={params.get("min_confidence") || ""}
+              onChange={(e) => setFilter("min_confidence", e.target.value)}
+            />
+          </label>
+          <label>
+            Analyzed from
+            <input
+              type="date"
+              value={params.get("from") || ""}
+              onChange={(e) => setFilter("from", e.target.value)}
+            />
+          </label>
+          <label>
+            Analyzed through
+            <input
+              type="date"
+              value={params.get("to") || ""}
+              onChange={(e) => setFilter("to", e.target.value)}
+            />
+          </label>
+          <label>
+            Sort by
+            <select
+              value={params.get("sort") || "score"}
+              onChange={(e) => setFilter("sort", e.target.value)}
+            >
+              <option value="score">Opportunity score</option>
+              <option value="confidence">Research confidence</option>
+              <option value="recent">Most recent analysis</option>
+              <option value="title">Name</option>
+            </select>
+          </label>
+          <button className="button" onClick={() => setParams({})}>
+            Reset filters
+          </button>
+        </div>
+        {q.error && <ErrorBox error={q.error} retry={() => q.refetch()} />}
+        {q.isPending ? (
+          <Loading />
+        ) : q.data?.items?.length ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Select</th>
+                  <th>Idea</th>
+                  <th>Score / confidence</th>
+                  <th>Decision</th>
+                  <th>Market / model</th>
+                  <th>Analyzed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {q.data.items.map((r: Row) => (
+                  <tr key={r.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={"Compare " + r.title}
+                        checked={selected.includes(r.id)}
+                        disabled={
+                          !selected.includes(r.id) && selected.length >= 3
+                        }
+                        onChange={(e) =>
+                          setSelected(
+                            e.target.checked
+                              ? [...selected, r.id]
+                              : selected.filter((x) => x !== r.id),
+                          )
+                        }
+                      />
+                    </td>
+                    <td>
+                      <Link className="title-link" to={"/ideas/" + r.id}>
+                        {r.title}
+                      </Link>
+                      <small className="table-subtext">{r.wedge}</small>
+                      <small>
+                        {human(r.app_or_game)} ·{" "}
+                        {r.category || "Category unknown"}
+                      </small>
+                    </td>
+                    <td>
+                      <Link to={"/ideas/" + r.id}>
+                        {r.score ?? "Unknown"} / {r.confidence ?? "Unknown"}
+                      </Link>
+                    </td>
+                    <td>
+                      <Badge value={r.recommendation || "Awaiting analysis"} />
+                      <small className="table-subtext">
+                        {human(r.disposition)}
+                      </small>
+                    </td>
+                    <td>
+                      {r.market_name || "Unstudied"}
+                      <small className="table-subtext">
+                        {r.model_key || "—"} {r.scoring_model_version}
+                      </small>
+                    </td>
+                    <td>{date(r.analyzed_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          !q.error && (
+            <Empty
+              title="No ideas match these filters"
+              text="Change the filters or run research to collect evidence."
+            />
+          )
+        )}
+        <div className="pagination">
+          <span>
+            {q.data?.count || 0} ideas · Page{" "}
+            {Number(params.get("page") || 0) + 1}
+          </span>
+          <button
+            className="button small"
+            disabled={!Number(params.get("page") || 0)}
+            onClick={() =>
+              setFilter("page", String(Number(params.get("page") || 0) - 1))
+            }
+          >
+            Previous
+          </button>
+          <button
+            className="button small"
+            disabled={
+              (Number(params.get("page") || 0) + 1) * 30 >= (q.data?.count || 0)
+            }
+            onClick={() =>
+              setFilter("page", String(Number(params.get("page") || 0) + 1))
+            }
+          >
+            Next
+          </button>
+        </div>
+      </section>
+      {compare && (
+        <Comparison ids={selected} onClose={() => setCompare(false)} />
+      )}
+    </>
+  );
+}
+function Comparison({ ids, onClose }: { ids: string[]; onClose: () => void }) {
+  const q = useQuery({
+    queryKey: ["compare", ids],
+    queryFn: () => api("/decisions/compare?ids=" + ids.join(",")),
+  });
+  const items = q.data?.items || [];
+  const factors = [
+    ...new Set<string>(
+      items.flatMap((r: Row) => Object.keys(r.factors?.values || {})),
+    ),
+  ];
+  return (
+    <Dialog title="Compare ideas" wide onClose={onClose}>
+      {q.isPending && <Loading />}
+      {q.error && <ErrorBox error={q.error} retry={() => q.refetch()} />}
+      {q.data && (
+        <>
+          <div className="callout">
+            {q.data.notes.map((n: string) => (
+              <p key={n}>{n}</p>
+            ))}
+          </div>
+          <div className="comparison-grid">
+            {items.map((r: Row) => (
+              <section className="card prose-card" key={r.id}>
+                <h3>
+                  <Link to={"/ideas/" + r.id}>{r.title}</Link>
+                </h3>
+                <Badge value={r.recommendation || "Unstudied"} />
+                <p>
+                  Score {r.score ?? "Unknown"} · Confidence{" "}
+                  {r.confidence ?? "Unknown"}
+                </p>
+                <small>
+                  {r.market_name || "Unknown market"} · {r.model_key}{" "}
+                  {r.scoring_model_version} · {date(r.analyzed_at)}
+                </small>
+                <h4>Wedge</h4>
+                <p>{r.wedge}</p>
+                <h4>Biggest risk</h4>
+                <p>{r.biggest_risk || "Unknown"}</p>
+                <h4>Validate next</h4>
+                <p>
+                  {r.validation_priorities?.[0] ||
+                    "No validation step recorded"}
+                </p>
+                <h4>Critical unknowns</h4>
+                <ul>
+                  {r.factors?.analysis?.critical_unknowns?.map((v: string) => (
+                    <li key={v}>{v}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Factor assessment</th>
+                  {items.map((r: Row) => (
+                    <th key={r.id}>{r.title}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {factors.map((f) => (
+                  <tr key={f}>
+                    <th>{human(f)}</th>
+                    {items.map((r: Row) => (
+                      <td key={r.id}>
+                        {r.factors?.values?.[f] ?? "Unknown"}
+                        <small className="table-subtext">
+                          {r.factors?.assessments?.[f]?.rationale ||
+                            "No supporting assessment"}
+                        </small>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Dialog>
   );
 }
 function OpportunityConcepts({ id }: { id: string }) {

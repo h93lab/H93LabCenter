@@ -22,6 +22,7 @@ const statements = Object.entries(secrets).map(
 statements.push(
   "perform cron.schedule('h93labcenter-worker','15 seconds',$$select private.center_wake('worker')$$);",
   "perform cron.schedule('h93labcenter-dispatch','*/15 * * * *',$$select private.center_wake('dispatch')$$);",
+  "perform cron.alter_job(jobid,active:=true) from cron.job where jobname in ('h93labcenter-worker','h93labcenter-dispatch');",
 );
 const file = ".local/cron-setup.sql";
 writeFileSync(

@@ -879,7 +879,22 @@
           },
           "relation": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "supports",
+              "derived_from",
+              "implements",
+              "implemented_by",
+              "displayed_on",
+              "shown_on",
+              "governed_by",
+              "depends_on",
+              "validated_by",
+              "tested_by",
+              "affects",
+              "supersedes",
+              "contradicts",
+              "covered_by"
+            ]
           }
         },
         "required": [

@@ -156,6 +156,8 @@ export type Database = {
           active_prompt_version_id: string | null
           active_schema_version: string | null
           created_at: string
+          daily_budget_usd: number | null
+          daily_call_limit: number
           enabled: boolean
           fallback_models: Json
           id: string
@@ -171,6 +173,8 @@ export type Database = {
           active_prompt_version_id?: string | null
           active_schema_version?: string | null
           created_at?: string
+          daily_budget_usd?: number | null
+          daily_call_limit?: number
           enabled?: boolean
           fallback_models?: Json
           id?: string
@@ -186,6 +190,8 @@ export type Database = {
           active_prompt_version_id?: string | null
           active_schema_version?: string | null
           created_at?: string
+          daily_budget_usd?: number | null
+          daily_call_limit?: number
           enabled?: boolean
           fallback_models?: Json
           id?: string
@@ -717,6 +723,7 @@ export type Database = {
           change_summary: string | null
           consistency_review: Json | null
           created_at: string
+          generated_by_job_id: string | null
           id: string
           is_current: boolean
           manifest: Json
@@ -732,6 +739,7 @@ export type Database = {
           change_summary?: string | null
           consistency_review?: Json | null
           created_at?: string
+          generated_by_job_id?: string | null
           id?: string
           is_current?: boolean
           manifest?: Json
@@ -747,6 +755,7 @@ export type Database = {
           change_summary?: string | null
           consistency_review?: Json | null
           created_at?: string
+          generated_by_job_id?: string | null
           id?: string
           is_current?: boolean
           manifest?: Json
@@ -764,6 +773,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "blueprint_versions"
             referencedColumns: ["project_id", "id"]
+          },
+          {
+            foreignKeyName: "blueprint_versions_generated_by_job_id_fkey"
+            columns: ["generated_by_job_id"]
+            isOneToOne: false
+            referencedRelation: "research_jobs"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "blueprint_versions_project_id_fkey"
@@ -1198,6 +1214,45 @@ export type Database = {
           },
         ]
       }
+      concept_evidence: {
+        Row: {
+          concept_id: string
+          created_at: string
+          evidence_id: string
+          origin: string
+          owner_id: string
+        }
+        Insert: {
+          concept_id: string
+          created_at?: string
+          evidence_id: string
+          origin?: string
+          owner_id: string
+        }
+        Update: {
+          concept_id?: string
+          created_at?: string
+          evidence_id?: string
+          origin?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "concept_evidence_concept_id_fkey"
+            columns: ["concept_id"]
+            isOneToOne: false
+            referencedRelation: "product_concepts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "concept_evidence_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       concept_markets: {
         Row: {
           concept_id: string
@@ -1375,11 +1430,13 @@ export type Database = {
           market_id: string | null
           normalized_payload: Json | null
           normalized_text: string | null
+          observed_market_code: string | null
           owner_id: string
           parser_version: string | null
           published_at: string | null
           raw_payload: Json | null
           raw_text: string | null
+          requested_market_id: string | null
           research_run_id: string | null
           retention_metadata: Json
           source_id: string
@@ -1398,11 +1455,13 @@ export type Database = {
           market_id?: string | null
           normalized_payload?: Json | null
           normalized_text?: string | null
+          observed_market_code?: string | null
           owner_id: string
           parser_version?: string | null
           published_at?: string | null
           raw_payload?: Json | null
           raw_text?: string | null
+          requested_market_id?: string | null
           research_run_id?: string | null
           retention_metadata?: Json
           source_id: string
@@ -1421,11 +1480,13 @@ export type Database = {
           market_id?: string | null
           normalized_payload?: Json | null
           normalized_text?: string | null
+          observed_market_code?: string | null
           owner_id?: string
           parser_version?: string | null
           published_at?: string | null
           raw_payload?: Json | null
           raw_text?: string | null
+          requested_market_id?: string | null
           research_run_id?: string | null
           retention_metadata?: Json
           source_id?: string
@@ -1437,6 +1498,13 @@ export type Database = {
           {
             foreignKeyName: "evidence_market_id_fkey"
             columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evidence_requested_market_id_fkey"
+            columns: ["requested_market_id"]
             isOneToOne: false
             referencedRelation: "markets"
             referencedColumns: ["id"]
@@ -2128,6 +2196,7 @@ export type Database = {
           market_id: string | null
           owner_id: string
           rationale: string
+          research_job_id: string | null
           score_snapshot_id: string | null
           status: Database["public"]["Enums"]["recommendation_status"]
           strongest_evidence_ids: Json
@@ -2142,6 +2211,7 @@ export type Database = {
           market_id?: string | null
           owner_id: string
           rationale: string
+          research_job_id?: string | null
           score_snapshot_id?: string | null
           status: Database["public"]["Enums"]["recommendation_status"]
           strongest_evidence_ids?: Json
@@ -2156,6 +2226,7 @@ export type Database = {
           market_id?: string | null
           owner_id?: string
           rationale?: string
+          research_job_id?: string | null
           score_snapshot_id?: string | null
           status?: Database["public"]["Enums"]["recommendation_status"]
           strongest_evidence_ids?: Json
@@ -2181,6 +2252,13 @@ export type Database = {
             columns: ["market_id"]
             isOneToOne: false
             referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendations_research_job_id_fkey"
+            columns: ["research_job_id"]
+            isOneToOne: false
+            referencedRelation: "research_jobs"
             referencedColumns: ["id"]
           },
           {
@@ -2479,6 +2557,75 @@ export type Database = {
             columns: ["market_id"]
             isOneToOne: false
             referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_import_batches: {
+        Row: {
+          concept_id: string
+          content_hash: string
+          created_at: string
+          id: string
+          item_count: number
+          language: string
+          market_code: string
+          owner_id: string
+          platform: string
+          request_key: string
+          sampled_at: string
+          source_id: string
+          source_name: string
+          source_url: string
+          verification_origin: string
+        }
+        Insert: {
+          concept_id: string
+          content_hash: string
+          created_at?: string
+          id?: string
+          item_count: number
+          language: string
+          market_code: string
+          owner_id: string
+          platform: string
+          request_key: string
+          sampled_at: string
+          source_id: string
+          source_name: string
+          source_url: string
+          verification_origin?: string
+        }
+        Update: {
+          concept_id?: string
+          content_hash?: string
+          created_at?: string
+          id?: string
+          item_count?: number
+          language?: string
+          market_code?: string
+          owner_id?: string
+          platform?: string
+          request_key?: string
+          sampled_at?: string
+          source_id?: string
+          source_name?: string
+          source_url?: string
+          verification_origin?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_import_batches_concept_id_fkey"
+            columns: ["concept_id"]
+            isOneToOne: false
+            referencedRelation: "product_concepts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_import_batches_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "research_sources"
             referencedColumns: ["id"]
           },
         ]
@@ -2973,6 +3120,65 @@ export type Database = {
           },
         ]
       }
+      validation_records: {
+        Row: {
+          concept_id: string
+          created_at: string
+          estimated_cost_usd: number
+          estimated_hours: number
+          evidence_ids: string[]
+          id: string
+          method: string
+          observed_at: string
+          outcome: string
+          owner_id: string
+          question: string
+          request_key: string
+          result: string | null
+          success_criterion: string
+        }
+        Insert: {
+          concept_id: string
+          created_at?: string
+          estimated_cost_usd?: number
+          estimated_hours?: number
+          evidence_ids?: string[]
+          id?: string
+          method: string
+          observed_at: string
+          outcome: string
+          owner_id: string
+          question: string
+          request_key: string
+          result?: string | null
+          success_criterion: string
+        }
+        Update: {
+          concept_id?: string
+          created_at?: string
+          estimated_cost_usd?: number
+          estimated_hours?: number
+          evidence_ids?: string[]
+          id?: string
+          method?: string
+          observed_at?: string
+          outcome?: string
+          owner_id?: string
+          question?: string
+          request_key?: string
+          result?: string | null
+          success_criterion?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "validation_records_concept_id_fkey"
+            columns: ["concept_id"]
+            isOneToOne: false
+            referencedRelation: "product_concepts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2994,7 +3200,30 @@ export type Database = {
         Args: { p_change: string; p_owner: string; p_report: Json }
         Returns: string
       }
+      center_cache_job_result: {
+        Args: {
+          p_attempt: number
+          p_job: string
+          p_owner: string
+          p_result: Json
+        }
+        Returns: undefined
+      }
       center_claim: { Args: { p_queue: string }; Returns: Json }
+      center_commit_analysis: {
+        Args: {
+          p_attempt: number
+          p_job: string
+          p_owner: string
+          p_result: Json
+          p_writes: Json
+        }
+        Returns: Json
+      }
+      center_decision_list: {
+        Args: { p_filter?: Json; p_owner: string }
+        Returns: Json
+      }
       center_enqueue: {
         Args: {
           p_key: string
@@ -3004,6 +3233,19 @@ export type Database = {
           p_type: string
         }
         Returns: string
+      }
+      center_fail_attempt: {
+        Args: {
+          p_attempt: number
+          p_error: string
+          p_job: string
+          p_message: number
+          p_queue: string
+          p_result: Json
+          p_retry: boolean
+          p_retry_seconds: number
+        }
+        Returns: undefined
       }
       center_finish: {
         Args: {
@@ -3031,6 +3273,16 @@ export type Database = {
       center_go: {
         Args: { p_concept: string; p_key: string; p_owner: string }
         Returns: string
+      }
+      center_merge_run_concepts: {
+        Args: {
+          p_attempt: number
+          p_concepts: Json
+          p_job: string
+          p_owner: string
+          p_run: string
+        }
+        Returns: undefined
       }
       center_publish: {
         Args: {
@@ -3063,6 +3315,16 @@ export type Database = {
           p_owner: string
           p_project: string
           p_summary?: string
+        }
+        Returns: string
+      }
+      center_save_generated_blueprint: {
+        Args: {
+          p_attempt: number
+          p_bundle: Json
+          p_job: string
+          p_owner: string
+          p_report: Json
         }
         Returns: string
       }

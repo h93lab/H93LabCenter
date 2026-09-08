@@ -1,6 +1,43 @@
 import { sha } from "./domain.ts";
 import type { Row } from "./store.ts";
 export const supportedSources = ["apple_app_store", "hacker_news", "github"];
+export function sourceCoverage(key: string, requested: string) {
+  return {
+    requested_market_code: requested.toUpperCase(),
+    observed_market_code:
+      key === "apple_app_store"
+        ? requested === "GLOBAL"
+          ? "US"
+          : requested.toUpperCase()
+        : null,
+    language: "und",
+    language_basis: "not_detected",
+    coverage_note:
+      key === "apple_app_store"
+        ? requested === "GLOBAL"
+          ? "US storefront sample; not representative of the global market."
+          : "Storefront sample; availability does not establish demand."
+        : "Public source sample; geographic coverage and human language are unconfirmed.",
+    platform: key === "apple_app_store" ? "ios" : "unknown",
+  };
+}
+function covered(items: Row[], key: string, requested: string) {
+  return items.map((item) => ({
+    ...item,
+    raw_payload: {
+      ...item.raw_payload,
+      provenance: sourceCoverage(key, requested),
+    },
+  }));
+}
+export function appleReviewEntries(feed: Row) {
+  const raw = feed.feed?.entry;
+  const entries = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return entries.filter(
+    (x: Row) =>
+      x["im:rating"] && x.id?.label && typeof x.content?.label === "string",
+  );
+}
 async function json(url: string) {
   const hosts = [
     "itunes.apple.com",
@@ -78,16 +115,12 @@ export async function collectSource(
           const feed = await json(
             "https://itunes.apple.com/" +
               (market === "GLOBAL" ? "us" : market.toLowerCase()) +
-              "/rss/customerreviews/id=" +
+              "/rss/customerreviews/page=1/id=" +
               encodeURIComponent(app.external_id) +
-              "/sortBy=mostRecent/json",
+              "/sortby=mostrecent/json",
           );
-          const entries = Array.isArray(feed.feed?.entry)
-            ? feed.feed.entry
-            : [];
-          app.raw_payload.review_sample_status = entries.some(
-            (x: Row) => x["im:rating"],
-          )
+          const entries = appleReviewEntries(feed);
+          app.raw_payload.review_sample_status = entries.length
             ? "available"
             : "empty";
           for (const item of entries
@@ -113,7 +146,7 @@ export async function collectSource(
         }
       }),
     );
-    return [...listings, ...reviews];
+    return covered([...listings, ...reviews], key, market);
   }
   if (key === "hacker_news") {
     const data = await json(
@@ -122,26 +155,30 @@ export async function collectSource(
         "&query=" +
         encodeURIComponent(query),
     );
-    return data.hits.map((x: Row) => ({
-      external_id: x.objectID,
-      title: x.title,
-      canonical_url: "https://news.ycombinator.com/item?id=" + x.objectID,
-      raw_text: [
-        x.title,
-        x.story_text || "",
-        x.url || "",
-        "Discussion points: " + x.points,
-      ]
-        .join("\n")
-        .slice(0, 10000),
-      raw_payload: {
-        points: x.points,
-        comments: x.num_comments,
-        product_url: x.url,
-      },
-      published_at: x.created_at,
-      source_type: "community",
-    }));
+    return covered(
+      data.hits.map((x: Row) => ({
+        external_id: x.objectID,
+        title: x.title,
+        canonical_url: "https://news.ycombinator.com/item?id=" + x.objectID,
+        raw_text: [
+          x.title,
+          x.story_text || "",
+          x.url || "",
+          "Discussion points: " + x.points,
+        ]
+          .join("\n")
+          .slice(0, 10000),
+        raw_payload: {
+          points: x.points,
+          comments: x.num_comments,
+          product_url: x.url,
+        },
+        published_at: x.created_at,
+        source_type: "community",
+      })),
+      key,
+      market,
+    );
   }
   if (key === "github") {
     const data = await json(
@@ -150,24 +187,28 @@ export async function collectSource(
         "&q=" +
         encodeURIComponent(query),
     );
-    return data.items.map((x: Row) => ({
-      external_id: String(x.id),
-      title: x.full_name,
-      canonical_url: x.html_url,
-      raw_text: [
-        x.full_name,
-        x.description || "",
-        "Stars: " + x.stargazers_count,
-        "Language: " + x.language,
-      ].join("\n"),
-      raw_payload: {
-        stars: x.stargazers_count,
-        language: x.language,
-        license: x.license?.spdx_id,
-      },
-      published_at: x.updated_at,
-      source_type: "official_api",
-    }));
+    return covered(
+      data.items.map((x: Row) => ({
+        external_id: String(x.id),
+        title: x.full_name,
+        canonical_url: x.html_url,
+        raw_text: [
+          x.full_name,
+          x.description || "",
+          "Stars: " + x.stargazers_count,
+          "Language: " + x.language,
+        ].join("\n"),
+        raw_payload: {
+          stars: x.stargazers_count,
+          language: x.language,
+          license: x.license?.spdx_id,
+        },
+        published_at: x.updated_at,
+        source_type: "official_api",
+      })),
+      key,
+      market,
+    );
   }
   throw Error("ADAPTER_UNAVAILABLE");
 }
@@ -177,16 +218,21 @@ export async function evidenceDraft(
   run: string,
   marketId: string | null,
 ) {
+  const provenance = item.raw_payload?.provenance;
+  const observed = provenance?.observed_market_code || null;
+  const requested = provenance?.requested_market_code || null;
   return {
     ...item,
     owner_id: source.owner_id,
     research_run_id: run,
     source_id: source.id,
-    market_id: marketId,
+    requested_market_id: marketId,
+    market_id: observed && observed === requested ? marketId : null,
+    observed_market_code: observed,
     normalized_text: item.raw_text,
     normalized_payload: item.raw_payload,
     content_hash: await sha(item.canonical_url + "\n" + item.raw_text),
-    parser_version: "1.0",
-    language: "en",
+    parser_version: "1.1",
+    language: provenance?.language || "und",
   };
 }

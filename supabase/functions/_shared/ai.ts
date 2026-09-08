@@ -1,6 +1,28 @@
 import { z } from "zod";
 import { sha } from "./domain.ts";
 import { Store, type Env, type Row } from "./store.ts";
+import { jobError, providerHttpError } from "./job-errors.ts";
+export function callReservation(
+  inputBytes: number,
+  outputTokens: number,
+  pricing: { prompt: unknown; completion: unknown },
+  limit: number | null | undefined,
+) {
+  const input = Number(pricing.prompt),
+    output = Number(pricing.completion);
+  const maximum = inputBytes * input + outputTokens * output;
+  if (
+    pricing.prompt == null ||
+    pricing.completion == null ||
+    !Number.isFinite(maximum) ||
+    input < 0 ||
+    output < 0 ||
+    maximum < 0 ||
+    maximum > (limit ?? 0.15)
+  )
+    throw Error("CALL_BUDGET_LIMIT");
+  return maximum;
+}
 let catalog: Row[] = [];
 let catalogAt = 0;
 export async function models() {
@@ -22,6 +44,7 @@ export async function ai<T>(
   context: unknown,
   task: string,
   job?: Row,
+  validate?: (result: T) => void,
 ): Promise<T> {
   if (!env.OPENROUTER_API_KEY) throw Error("OPENROUTER_NOT_CONFIGURED");
   const config = (await s.list("ai_roles", { role_key: role }))[0];
@@ -35,6 +58,7 @@ export async function ai<T>(
     ...(config.fallback_models || []),
   ].slice(0, 3);
   let last = "AI_FAILED";
+  let lastError: Error | undefined;
   const deadline = Math.min(job?.deadline_at || Infinity, Date.now() + 120000);
   for (const model of candidates) {
     if (deadline - Date.now() < 5000) throw Error("AI_TIMEOUT");
@@ -93,15 +117,12 @@ export async function ai<T>(
       new TextEncoder().encode(
         JSON.stringify(messages) + JSON.stringify(jsonSchema),
       ).length + 2000;
-    const maximum =
-      inputBytes * Number(m.pricing.prompt) +
-      maxTokens * Number(m.pricing.completion);
-    if (
-      !Number.isFinite(maximum) ||
-      maximum <= 0 ||
-      maximum > (config.max_cost_per_call_usd || 0.15)
-    )
-      throw Error("CALL_BUDGET_LIMIT");
+    const maximum = callReservation(
+      inputBytes,
+      maxTokens,
+      m.pricing,
+      config.max_cost_per_call_usd,
+    );
     const invocation = await s.rpc("center_reserve_ai", {
       p_owner: s.owner,
       p_role: role,
@@ -112,7 +133,7 @@ export async function ai<T>(
     });
     await s.update("ai_invocations", invocation, {
       prompt_version_id: prompt?.id || null,
-      schema_version: "center-1.1",
+      schema_version: "center-1.2",
       input_checksum: await sha(JSON.stringify(messages)),
       schema_checksum: await sha(JSON.stringify(jsonSchema)),
       requested_model: model,
@@ -149,9 +170,10 @@ export async function ai<T>(
         },
       );
       if (!response.ok) {
-        if (response.status === 401 || response.status === 402)
-          throw Error("PROVIDER_AUTH_OR_CREDIT");
-        throw Error("PROVIDER_HTTP_" + response.status);
+        throw providerHttpError(
+          response.status,
+          response.headers.get("retry-after"),
+        );
       }
       const payload = await response.json();
       charged = payload.usage?.cost ?? maximum;
@@ -170,6 +192,7 @@ export async function ai<T>(
           if (typeof value === "object") verify(value);
       };
       verify(result);
+      validate?.(result);
       await s.update("ai_invocations", invocation, {
         status: "succeeded",
         cost_usd: charged,
@@ -181,7 +204,7 @@ export async function ai<T>(
         latency_ms: Date.now() - start,
         external_request_id: payload.id,
         prompt_version_id: prompt?.id || null,
-        schema_version: "center-1.1",
+        schema_version: "center-1.2",
         output_checksum: await sha(JSON.stringify(result)),
       });
       return result;
@@ -204,8 +227,9 @@ export async function ai<T>(
           : e instanceof SyntaxError
             ? "AI_JSON_INVALID"
             : e instanceof Error
-              ? e.message
+              ? jobError(e).message
               : "AI_FAILED";
+      lastError = last === jobError(e).message ? jobError(e) : Error(last);
       await s.update("ai_invocations", invocation, {
         status: "failed",
         cost_usd: charged,
@@ -216,5 +240,5 @@ export async function ai<T>(
       if (last === "PROVIDER_AUTH_OR_CREDIT") throw Error(last);
     }
   }
-  throw Error(last);
+  throw lastError || Error(last);
 }

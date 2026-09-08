@@ -28,15 +28,48 @@ export class Store {
     public db: SupabaseClient,
     public owner: string,
   ) {}
-  async list(table: string, filter: Row = {}, limit = 100) {
+  async list(
+    table: string,
+    filter: Row = {},
+    limit = 100,
+    options: { order?: string; ascending?: boolean; offset?: number } = {},
+  ) {
     let q = this.db
       .from(table)
       .select("*")
       .eq(table === "profiles" ? "id" : "owner_id", this.owner);
     for (const [k, v] of Object.entries(filter)) q = q.eq(k, v);
-    const { data, error } = await q.limit(limit);
+    if (options.order)
+      q = q.order(options.order, { ascending: options.ascending ?? false });
+    const offset = options.offset ?? 0;
+    const { data, error } = await q.range(offset, offset + limit - 1);
     if (error) throw Error(error.message);
     return data as Row[];
+  }
+  async all(table: string, filter: Row = {}, order = "id") {
+    const rows: Row[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const page = await this.list(table, filter, 1000, {
+        order,
+        ascending: true,
+        offset,
+      });
+      rows.push(...page);
+      if (page.length < 1000) return rows;
+    }
+  }
+  async byIds(table: string, ids: string[]) {
+    const rows: Row[] = [];
+    for (let offset = 0; offset < ids.length; offset += 200) {
+      const { data, error } = await this.db
+        .from(table)
+        .select("*")
+        .eq("owner_id", this.owner)
+        .in("id", ids.slice(offset, offset + 200));
+      if (error) throw Error(error.message);
+      rows.push(...data);
+    }
+    return rows;
   }
   async one(table: string, id: string) {
     const { data, error } = await this.db

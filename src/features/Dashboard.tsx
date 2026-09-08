@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   FlaskConical,
   ArrowUpRight,
@@ -25,6 +25,7 @@ import {
 } from "../components/ui";
 import ResearchDialog from "./ResearchDialog";
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [research, setResearch] = useState(false);
   const q = useQuery({
     queryKey: ["overview"],
@@ -41,16 +42,47 @@ export default function Dashboard() {
   const promoted = promotionToday?.promoted ? promotionToday : null;
   const daily = d.ideas.items.find((i: any) => i.id === promoted?.concept_id);
   const recommendations = d.recommendations.items;
+  const recommendationOrder: Record<string, number> = {
+    STRONG_BUILD: 0,
+    BUILD: 1,
+    VALIDATE_FIRST: 2,
+    WATCH: 3,
+    PASS: 4,
+    KILLED: 5,
+  };
   const scored = d.ideas.items
     .map((i: any) => ({
       ...i,
-      score: d.scores.items.find((s: any) => s.concept_id === i.id),
+      score: d.scores.items.find(
+        (s: any) =>
+          s.id ===
+          recommendations.find((r: any) => r.concept_id === i.id)
+            ?.score_snapshot_id,
+      ),
       recommendation: recommendations.find((r: any) => r.concept_id === i.id),
+      confidence: d.confidences?.items.find(
+        (c: any) =>
+          c.id ===
+          recommendations.find((r: any) => r.concept_id === i.id)
+            ?.confidence_snapshot_id,
+      ),
     }))
     .sort(
       (a: any, b: any) =>
-        (b.score?.overall_score || 0) - (a.score?.overall_score || 0),
+        (recommendationOrder[a.recommendation?.status] ?? 6) -
+          (recommendationOrder[b.recommendation?.status] ?? 6) ||
+        (b.score?.overall_score || 0) - (a.score?.overall_score || 0) ||
+        (b.confidence?.confidence || 0) - (a.confidence?.confidence || 0),
     );
+  const eligible = scored.filter((item: any) =>
+    ["STRONG_BUILD", "BUILD", "VALIDATE_FIRST", "WATCH"].includes(
+      item.recommendation?.status,
+    ),
+  );
+  const excluded = scored.filter((item: any) =>
+    ["PASS", "KILLED"].includes(item.recommendation?.status),
+  );
+  const best = eligible[0];
   return (
     <>
       <PageHeader
@@ -133,6 +165,7 @@ export default function Dashboard() {
                 <h2>{daily.title}</h2>
                 <p>{daily.value_proposition}</p>
                 <Score
+                  onClick={() => navigate("/ideas/" + daily.id)}
                   value={Number(
                     d.scores.items.find(
                       (s: any) => s.id === promoted.score_snapshot_id,
@@ -164,51 +197,96 @@ export default function Dashboard() {
             </Empty>
           )}
         </section>
-        <section className="card workflow-card">
-          <div className="card-heading">
-            <h2>Your path to a new product</h2>
-          </div>
-          <div className="workflow-step">
-            <span>01</span>
-            <div>
-              <h3>Discover the opportunity</h3>
-              <p>Real sources, signals and unmet needs.</p>
+        {best ? (
+          <section className="card prose-card best-candidate">
+            <h2>
+              {daily
+                ? "Next candidate to review"
+                : "Best candidate to validate"}
+            </h2>
+            <h3>
+              <Link className="title-link" to={"/ideas/" + best.id}>
+                {best.title}
+              </Link>
+            </h3>
+            <Badge value={best.recommendation.status} />
+            <p>
+              Score {best.score?.overall_score ?? "Unknown"} / 100 · Confidence{" "}
+              {best.confidence?.confidence ?? "Unknown"}
+              {best.confidence ? " / 100" : ""}
+            </p>
+            <h3>What still needs attention</h3>
+            {d.settings && (
+              <p className="muted">
+                Promotion thresholds: score{" "}
+                {d.settings.idea_of_day_min_score ?? "Unknown"}, confidence{" "}
+                {d.settings.idea_of_day_min_confidence ?? "Unknown"}.
+              </p>
+            )}
+            <p>{best.recommendation.rationale}</p>
+            <ul>
+              {(best.recommendation.validation_priorities || []).map(
+                (priority: string) => (
+                  <li key={priority}>{priority}</li>
+                ),
+              )}
+            </ul>
+            <Link className="button" to={"/ideas/" + best.id}>
+              Review evidence and blockers
+              <ArrowRight size={15} />
+            </Link>
+          </section>
+        ) : (
+          <section className="card workflow-card">
+            <div className="card-heading">
+              <h2>Your path to a new product</h2>
             </div>
-            <Compass size={19} />
-          </div>
-          <div className="workflow-step">
-            <span>02</span>
-            <div>
-              <h3>Make an informed decision</h3>
-              <p>Explainable scores and evidence.</p>
+            <div className="workflow-step">
+              <span>01</span>
+              <div>
+                <h3>Discover the opportunity</h3>
+                <p>Real sources, signals and unmet needs.</p>
+              </div>
+              <Compass size={19} />
             </div>
-            <CheckCircle2 size={19} />
-          </div>
-          <div className="workflow-step">
-            <span>03</span>
-            <div>
-              <h3>Build your blueprint</h3>
-              <p>Specifications, prototype and a clear plan.</p>
+            <div className="workflow-step">
+              <span>02</span>
+              <div>
+                <h3>Make an informed decision</h3>
+                <p>Explainable scores and evidence.</p>
+              </div>
+              <CheckCircle2 size={19} />
             </div>
-            <FolderKanban size={19} />
-          </div>
-          <div className="workflow-note">
-            <span className="status-dot" /> Designed for Flutter · Android & iOS
-          </div>
-        </section>
+            <div className="workflow-step">
+              <span>03</span>
+              <div>
+                <h3>Build your blueprint</h3>
+                <p>Specifications, prototype and a clear plan.</p>
+              </div>
+              <FolderKanban size={19} />
+            </div>
+            <div className="workflow-note">
+              <span className="status-dot" /> Designed for Flutter · Android &
+              iOS
+            </div>
+          </section>
+        )}
       </div>
       <section className="card">
         <div className="card-heading">
           <div>
             <h2>Strongest candidates</h2>
-            <p>Ranked by the latest opportunity score.</p>
+            <p>
+              Eligible recommendations first, then score and research
+              confidence. Passed and killed ideas remain available below.
+            </p>
           </div>
           <Link to="/ideas" className="text-link">
             All ideas
             <ArrowUpRight size={15} />
           </Link>
         </div>
-        {!scored.length ? (
+        {!eligible.length ? (
           <Empty
             title="A clear view starts with evidence"
             text="Your researched ideas will appear here with scores, confidence and a recommendation."
@@ -220,13 +298,14 @@ export default function Dashboard() {
                 <tr>
                   <th>Product concept</th>
                   <th>Score</th>
+                  <th>Confidence</th>
                   <th>Recommendation</th>
                   <th>Last analyzed</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {scored.slice(0, 6).map((i: any) => (
+                {eligible.slice(0, 6).map((i: any) => (
                   <tr key={i.id}>
                     <td>
                       <Link className="title-link" to={"/ideas/" + i.id}>
@@ -237,6 +316,10 @@ export default function Dashboard() {
                     <td>
                       <b>{i.score?.overall_score ?? "—"}</b>
                       <span className="muted"> / 100</span>
+                    </td>
+                    <td>
+                      {i.confidence?.confidence ?? "Unknown"}
+                      {i.confidence ? " / 100" : ""}
                     </td>
                     <td>
                       <Badge
@@ -259,6 +342,29 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+      {excluded.length > 0 && (
+        <details className="card excluded-candidates">
+          <summary>
+            {excluded.length} passed or killed ideas · retained for review
+          </summary>
+          {excluded.map((item: any) => (
+            <Link
+              className="activity-row"
+              key={item.id}
+              to={"/ideas/" + item.id}
+            >
+              <span>
+                <b>{item.title}</b>
+                <small>
+                  {item.recommendation?.biggest_risk ||
+                    item.recommendation?.rationale}
+                </small>
+              </span>
+              <Badge value={item.recommendation.status} />
+            </Link>
+          ))}
+        </details>
+      )}
       <div className="bottom-grid">
         <section className="card">
           <div className="card-heading">

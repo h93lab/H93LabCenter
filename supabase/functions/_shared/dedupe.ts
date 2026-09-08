@@ -1,22 +1,31 @@
 import { z } from "zod";
 import { ai } from "./ai.ts";
 import { Store, type Env, type Row } from "./store.ts";
-import { normalize, similarity } from "./domain.ts";
+import { normalize, similarity, sha } from "./domain.ts";
+import { callReservation } from "./ai.ts";
+import { providerHttpError, jobError } from "./job-errors.ts";
 export async function embed(s: Store, env: Env, text: string, job: Row) {
   const role = (await s.list("ai_roles", { role_key: "dedupe_embeddings" }))[0];
   if (!role?.enabled || !role.primary_model)
     throw Error("EMBEDDING_MODEL_NOT_CONFIGURED");
+  const inputHash = await sha(text);
+  if (
+    job.result_ref?.embedding?.model === role.primary_model &&
+    job.result_ref.embedding.input_hash === inputHash
+  )
+    return job.result_ref.embedding;
   const catalog = await fetch(
     "https://openrouter.ai/api/v1/embeddings/models",
     { signal: AbortSignal.timeout(15000) },
   ).then((r) => r.json());
   const model = catalog.data?.find((m: Row) => m.id === role.primary_model);
   if (!model) throw Error("EMBEDDING_MODEL_UNAVAILABLE");
-  const maximum = Math.max(
-    0.000001,
-    new TextEncoder().encode(text).length * Number(model.pricing.prompt),
+  const maximum = callReservation(
+    new TextEncoder().encode(text).length,
+    0,
+    { prompt: model.pricing.prompt, completion: 0 },
+    role.max_cost_per_call_usd,
   );
-  if (maximum > role.max_cost_per_call_usd) throw Error("CALL_BUDGET_LIMIT");
   const id = await s.rpc("center_reserve_ai", {
     p_owner: s.owner,
     p_role: role.role_key,
@@ -25,6 +34,11 @@ export async function embed(s: Store, env: Env, text: string, job: Row) {
     p_job: job.id,
   });
   const started = Date.now();
+  await s.update("ai_invocations", id, {
+    requested_model: model.id,
+    input_checksum: inputHash,
+    schema_version: "embedding-1.0",
+  });
   try {
     const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
       method: "POST",
@@ -39,7 +53,11 @@ export async function embed(s: Store, env: Env, text: string, job: Row) {
       }),
       signal: AbortSignal.timeout(30000),
     });
-    if (!response.ok) throw Error("EMBEDDING_HTTP_" + response.status);
+    if (!response.ok)
+      throw providerHttpError(
+        response.status,
+        response.headers.get("retry-after"),
+      );
     const data = await response.json();
     const vector = z
       .array(z.number().finite())
@@ -58,14 +76,22 @@ export async function embed(s: Store, env: Env, text: string, job: Row) {
       input_tokens: data.usage?.prompt_tokens,
       latency_ms: Date.now() - started,
     });
-    return { vector, model: model.id };
+    const result = { vector, model: model.id, input_hash: inputHash };
+    job.result_ref = { ...job.result_ref, embedding: result };
+    await s.rpc("center_cache_job_result", {
+      p_owner: s.owner,
+      p_job: job.id,
+      p_attempt: job.attempt_count,
+      p_result: job.result_ref,
+    });
+    return result;
   } catch (e) {
     await s.update("ai_invocations", id, {
       status: "failed",
       error_code: "EMBEDDING_FAILED",
       cost_usd: maximum,
     });
-    throw e;
+    throw jobError(e);
   }
 }
 export async function opportunityMatch(
@@ -76,11 +102,19 @@ export async function opportunityMatch(
   job: Row,
 ) {
   const normalized = normalize(candidate.problem + " " + candidate.audience);
-  const exact = existing.find(
-    (o) =>
-      o.app_or_game === candidate.app_or_game &&
-      o.normalized_key === normalized,
-  );
+  const exact =
+    existing.find(
+      (o) =>
+        o.app_or_game === candidate.app_or_game &&
+        o.normalized_key === normalized,
+    ) ||
+    (
+      await s.list(
+        "opportunities",
+        { normalized_key: normalized, app_or_game: candidate.app_or_game },
+        1,
+      )
+    )[0];
   if (exact)
     return {
       match: exact,
@@ -109,9 +143,13 @@ export async function opportunityMatch(
   });
   let match: Row | undefined,
     reason = "New distinct market opportunity";
+  const matchedRows = await s.byIds(
+    "opportunities",
+    nearest.map((n: Row) => n.id),
+  );
   const candidates = nearest
     .map((n: Row) => ({
-      ...existing.find((o) => o.id === n.id),
+      ...matchedRows.find((o) => o.id === n.id),
       similarity: n.similarity,
     }))
     .filter((x: Row) => x.id);

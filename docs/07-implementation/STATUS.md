@@ -25,7 +25,7 @@ Original acceptance criteria remain in TASKS.md. “Verified locally” is not a
 | TASK-027 — Opportunities/Trends UI | Verified locally | Searchable opportunity and trend views with real records. |
 | TASK-030 — Competitor Identity + Discovery | Verified locally | Direct/indirect/substitute competitor identity backed by evidence. |
 | TASK-031 — Competitor Snapshots + Matrix | Verified locally | Listing snapshots and concept competitor comparisons; unsourced metrics unknown. |
-| TASK-032 — Review/User Voice Ingestion | Implemented; verification pending | Review feed ingestion implemented; sampled live Apple feeds were empty. |
+| TASK-032 — Review/User Voice Ingestion | Verified locally | Verified locally with six real Apple review entries in the scoped review run; CSV/JSON import and provenance also tested. |
 | TASK-033 — Review Classification/Clustering | Implemented; verification pending | Review-only clustering and actual sample counts; live coverage unavailable. |
 | TASK-034 — Market Gap Analysis | Implemented; verification pending | Evidence-linked review and market gaps; review-dependent findings remain unknown with empty feeds. |
 | TASK-035 — Market/Localization Analysis | Verified locally | Country/localization factor analysis and market score records. |
@@ -68,3 +68,7 @@ Original acceptance criteria remain in TASKS.md. “Verified locally” is not a
 | TASK-094 — Daily Cron | Implemented; verification pending | Vault-based local worker Cron and timezone dispatcher enabled after successful Edge research; hosted Cron waits for production access/verification. |
 | TASK-095 — End-to-End Acceptance Suite | Implemented; verification pending | Local real AI, Edge research, browser, integration and export acceptance passed; cold restart preserved published versions. Hosted acceptance pending. |
 | TASK-096 — Production Security/Performance Review | Implemented; verification pending | Secrets/RLS/private storage/build checks local. Hosted advisors, performance and deployment access pending. |
+
+## Approved review implementation
+
+Code/security, UI and decision-workspace recommendations are implemented locally. See [REVIEW_IMPLEMENTATION_RESULT.md](REVIEW_IMPLEMENTATION_RESULT.md) for the exact changes, tests, measured live run, Blueprint version 3 publication and external limitations. TASK-033 retains limited live validation: the six-review sample produced no clusters; membership integrity and review-only inputs are enforced and tested. Production and actual Figma verification remain pending.

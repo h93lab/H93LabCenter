@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { signalTypes, opportunityTypes } from "./taxonomy.ts";
+import { blueprintGraph, blueprintRelations } from "./blueprint-graph.ts";
 export { appWeights, gameWeights, confidenceWeights } from "./scoring.ts";
 export function weighted(
   values: Record<string, number>,
@@ -88,12 +89,42 @@ const text = z.string().min(1);
 const texts = z.array(text);
 const score = z.number().min(0).max(100);
 const ids = z.array(z.string().uuid()).min(1);
+export const killRules = [
+  "prohibited",
+  "unavailable_dependency",
+  "unsustainable_economics",
+  "no_credible_wedge",
+  "solo_maintenance",
+  "platform_policy",
+  "safety_liability",
+] as const;
 export const extractedSchema = z.object({
   claims: z.array(
     z.object({
       evidence_ids: ids,
+      evidence_links: z
+        .array(
+          z.object({
+            evidence_id: z.string().uuid(),
+            relation: z.enum([
+              "supports",
+              "contradicts",
+              "contextualizes",
+              "estimates",
+            ]),
+            strength: score,
+            rationale: text,
+          }),
+        )
+        .min(1),
       text,
-      verification: z.enum(["supported", "inferred", "estimated", "unknown"]),
+      verification: z.enum([
+        "supported",
+        "inferred",
+        "estimated",
+        "unknown",
+        "contradicted",
+      ]),
       confidence: score,
     }),
   ),
@@ -144,6 +175,23 @@ export const factorSchema = z.object({
   rationale: text,
   evidence_ids: z.array(z.string().uuid()),
 });
+const riskBase = {
+  rule: z.enum(killRules),
+  severity: z.literal("hard"),
+  rationale: text,
+};
+export const riskAssessmentSchema = z.union([
+  z.object({
+    ...riskBase,
+    result: z.enum(["pass", "fail"]),
+    evidence_ids: ids,
+  }),
+  z.object({
+    ...riskBase,
+    result: z.literal("unknown"),
+    evidence_ids: z.array(z.string().uuid()),
+  }),
+]);
 export const analysisSchema = z.object({
   market_code: text,
   factors: z.record(text, factorSchema),
@@ -156,15 +204,7 @@ export const analysisSchema = z.object({
     specificity: score,
   }),
   critical_unknowns: texts,
-  risks: z.array(
-    z.object({
-      rule: text,
-      result: z.enum(["pass", "fail", "unknown"]),
-      severity: z.enum(["hard", "warning"]),
-      rationale: text,
-      evidence_ids: ids,
-    }),
-  ),
+  risks: z.array(riskAssessmentSchema).length(killRules.length),
   competitors: z.array(
     z.object({
       name: text,
@@ -192,6 +232,65 @@ export const analysisSchema = z.object({
   executive_brief: text,
   validation_priorities: texts,
 });
+export function validateAnalysisEvidence(
+  result: z.infer<typeof analysisSchema>,
+  evidence: { id: string; source_type: string }[],
+) {
+  analysisSchema.parse(result);
+  const allowed = new Set(evidence.map((e) => e.id));
+  const seenRules = new Set(result.risks.map((r) => r.rule));
+  if (
+    seenRules.size !== killRules.length ||
+    killRules.some((rule) => !seenRules.has(rule))
+  )
+    throw Error("INCOMPLETE_KILL_ASSESSMENT");
+  for (const factor of Object.values(result.factors))
+    if (factor.evidence_ids.length)
+      assertEvidence(factor.evidence_ids, allowed);
+  for (const risk of result.risks) {
+    if (risk.result !== "unknown" || risk.evidence_ids.length)
+      assertEvidence(risk.evidence_ids, allowed);
+  }
+  for (const competitor of result.competitors) {
+    assertEvidence(competitor.evidence_ids, allowed);
+    let url: URL;
+    try {
+      url = new URL(competitor.url);
+    } catch {
+      throw Error("INVALID_COMPETITOR_URL");
+    }
+    if (!["https:", "http:"].includes(url.protocol))
+      throw Error("INVALID_COMPETITOR_URL");
+  }
+  for (const review of result.review_clusters) {
+    assertEvidence(review.evidence_ids, allowed);
+    if (
+      review.evidence_ids.some(
+        (id) =>
+          evidence.find((e) => e.id === id)?.source_type !== "user_review",
+      )
+    )
+      throw Error("INVALID_REVIEW_EVIDENCE");
+  }
+}
+export function validateClaimLinks(
+  claim: z.infer<typeof extractedSchema>["claims"][number],
+  allowed: Set<string>,
+) {
+  assertEvidence(claim.evidence_ids, allowed);
+  const linked = new Set(claim.evidence_links.map((l) => l.evidence_id));
+  if (
+    linked.size !== new Set(claim.evidence_ids).size ||
+    claim.evidence_ids.some((id) => !linked.has(id))
+  )
+    throw Error("UNSUPPORTED_EVIDENCE_REFERENCE");
+  assertEvidence([...linked], allowed);
+  const unique = new Set(
+    claim.evidence_links.map((l) => l.evidence_id + ":" + l.relation),
+  );
+  if (unique.size !== claim.evidence_links.length)
+    throw Error("DUPLICATE_CLAIM_LINK");
+}
 const key = text;
 const anyData = z.object({ notes: text, references: texts });
 export const technicalSchema = z.object({
@@ -385,7 +484,7 @@ export const blueprintSchema = z.object({
         source_key: key,
         target_kind: text,
         target_key: key,
-        relation: text,
+        relation: z.enum(blueprintRelations),
       }),
     )
     .min(1),
@@ -613,6 +712,7 @@ export function documentBundle(b: Blueprint, research: unknown): Bundle {
   };
 }
 export function quality(b: Bundle) {
+  const graph = blueprintGraph(b);
   const entities = [
     ...b.requirements,
     ...b.features,
@@ -624,9 +724,9 @@ export function quality(b: Bundle) {
     ...b.tests,
   ];
   const keys = new Set(entities.map((e) => e.stable_key));
-  const refs = b.links.every(
-    (l) => keys.has(l.source_key) && keys.has(l.target_key),
-  );
+  const refs =
+    graph.refs &&
+    b.links.every((l) => keys.has(l.source_key) && keys.has(l.target_key));
   const visited = new Set<string>(),
     visiting = new Set<string>();
   let cycle = false;
@@ -646,26 +746,18 @@ export function quality(b: Bundle) {
   const checks: [string, boolean, string][] = [
     [
       "Product coverage",
-      b.requirements.every((r) => r.acceptance_criteria.length > 0),
-      "Every requirement needs acceptance criteria.",
+      graph.product,
+      "Every requirement needs acceptance criteria and an implementation feature/task.",
     ],
     [
       "Scope integrity",
-      b.features.every((f) =>
-        b.links.some(
-          (l) => l.target_key === f.stable_key || l.source_key === f.stable_key,
-        ),
-      ),
-      "Link every feature to its purpose.",
+      graph.scope,
+      "Every feature must connect to an accepted requirement.",
     ],
     [
       "UX coverage",
-      b.screens.every((s) =>
-        b.links.some(
-          (l) => l.target_key === s.stable_key || l.source_key === s.stable_key,
-        ),
-      ),
-      "Every screen must be traceable.",
+      graph.ux,
+      "Every visible feature needs a screen/flow; every screen needs a feature/flow purpose. Headless features explicitly start data.notes with Headless:.",
     ],
     [
       "Screen states",
@@ -678,14 +770,16 @@ export function quality(b: Bundle) {
     ],
     [
       "Navigation integrity",
-      b.screens.every(
-        (s) =>
-          s.navigation.every((n) => screenKeys.has(n)) &&
-          s.components.every(
-            (c) => c.target === null || screenKeys.has(c.target),
-          ),
-      ) && b.flows.every((f) => f.steps.every((s) => screenKeys.has(s))),
-      "All flow steps, component targets and navigation targets must exist.",
+      graph.navigation &&
+        b.screens.every(
+          (s) =>
+            s.navigation.every((n) => screenKeys.has(n)) &&
+            s.components.every(
+              (c) => c.target === null || screenKeys.has(c.target),
+            ),
+        ) &&
+        b.flows.every((f) => f.steps.every((s) => screenKeys.has(s))),
+      "Every screen is reachable, every flow transition is executable, and every target exists.",
     ],
     [
       "Business rule coverage",

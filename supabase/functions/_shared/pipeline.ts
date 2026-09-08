@@ -2,10 +2,15 @@ import { z } from "zod";
 import { strengthBands } from "./taxonomy.ts";
 import { Store, admin, type Env, type Row } from "./store.ts";
 import { ai } from "./ai.ts";
+import { AnalysisWrites } from "./analysis-writes.ts";
+import { factorRubrics, scoringRubricVersion } from "./scoring.ts";
+import { jobError, retryable, retryDelay } from "./job-errors.ts";
 import { opportunityMatch, conceptMatch } from "./dedupe.ts";
 import { collectSource, evidenceDraft, supportedSources } from "./sources.ts";
 import {
   factorSchema,
+  validateAnalysisEvidence,
+  validateClaimLinks,
   technicalSchema,
   consistencySchema,
   reviewedQuality,
@@ -48,23 +53,36 @@ async function cached<T>(
   key = "ai",
 ): Promise<T> {
   await assertActive(s, job);
-  if (job.result_ref?.[key]) return job.result_ref[key];
+  if (job.result_ref?.cache_version === "center-1.2" && job.result_ref?.[key])
+    return job.result_ref[key];
   const value = await fn();
   await assertActive(s, job);
-  job.result_ref = { ...job.result_ref, [key]: value };
-  await s.update("research_jobs", job.id, { result_ref: job.result_ref });
+  job.result_ref = {
+    ...job.result_ref,
+    cache_version: "center-1.2",
+    [key]: value,
+  };
+  await s.rpc("center_cache_job_result", {
+    p_owner: s.owner,
+    p_job: job.id,
+    p_attempt: job.attempt_count,
+    p_result: job.result_ref,
+  });
   return value;
 }
 async function runEvidence(s: Store, run: Row) {
-  const ids = run.stats?.evidence_ids || [];
+  const ids: string[] = [...(run.stats?.evidence_ids || [])];
+  if (run.config_snapshot?.concept_id) {
+    const { data, error } = await s.db
+      .from("concept_evidence")
+      .select("evidence_id")
+      .eq("owner_id", s.owner)
+      .eq("concept_id", run.config_snapshot.concept_id);
+    if (error) throw Error(error.message);
+    ids.push(...(data || []).map((row) => row.evidence_id));
+  }
   if (!ids.length) return [];
-  const { data, error } = await s.db
-    .from("evidence")
-    .select("*")
-    .eq("owner_id", s.owner)
-    .in("id", ids);
-  if (error) throw Error(error.message);
-  return data as Row[];
+  return s.byIds("evidence", [...new Set(ids)]);
 }
 function evidenceContext(items: Row[]) {
   return items.map((e) => ({
@@ -74,6 +92,9 @@ function evidenceContext(items: Row[]) {
     source: e.source_type,
     date: e.published_at,
     text: e.normalized_text?.slice(0, 4500),
+    provenance: e.raw_payload?.provenance,
+    observed_market_code: e.observed_market_code,
+    language: e.language,
   }));
 }
 export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
@@ -140,8 +161,8 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
               id: await stableId(s.owner + saved.external_id),
               evidence_id: saved.id,
               external_id: saved.external_id,
-              market_id: market?.id || null,
-              language: "en",
+              market_id: saved.market_id || null,
+              language: saved.language || "und",
               rating: saved.raw_payload.rating,
               review_text: saved.normalized_text,
               published_at: saved.published_at,
@@ -180,7 +201,7 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
       warning_count: warnings.length,
       error_summary: warnings,
     });
-    if (evidenceIds.length)
+    if (evidenceIds.length || run!.config_snapshot.concept_id)
       await s.enqueue("EXTRACT", run!.id + ":EXTRACT", {}, run!.id);
     return { items: evidenceIds.length, warnings };
   }
@@ -194,24 +215,35 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         "claim_extractor",
         extractedSchema,
         evidenceContext(evidence),
-        "Extract atomic claims and distinct meaningful mobile-market signals. Strength is a qualitative class: weak, moderate, strong or extreme, NOT measured growth. Store metadata alone cannot establish growth without historical comparison. Return 4–12 claims and 3–8 signals when justified.",
+        "Extract atomic claims and distinct meaningful mobile-market signals. Each claim needs evidence_links with supplied evidence_id, relation (supports/contradicts/contextualizes/estimates), strength and rationale; evidence_ids must equal the unique linked IDs. Preserve genuine disagreement; never manufacture contradictory sources. Strength is a qualitative class: weak, moderate, strong or extreme, NOT measured growth. Store metadata alone cannot establish growth without historical comparison. Return 4–12 claims and 3–8 signals when justified.",
         job,
+        (output) => {
+          for (const claim of output.claims) validateClaimLinks(claim, allowed);
+        },
       ),
     );
+    extractedSchema.parse(result);
+    for (const c of result.claims) validateClaimLinks(c, allowed);
+    for (const signal of result.signals)
+      assertEvidence(signal.evidence_ids, allowed);
     for (const [i, c] of result.claims.entries()) {
       assertEvidence(c.evidence_ids, allowed);
       const row = await s.put("claims", {
         id: await stableId(job.id + ":claim:" + i),
         claim_type: "market_observation",
         claim_text: c.text,
-        verification: c.verification,
-        confidence: c.confidence,
+        verification: c.evidence_links.some((l) => l.relation === "contradicts")
+          ? "contradicted"
+          : c.verification,
+        confidence: c.evidence_links.some((l) => l.relation === "contradicts")
+          ? Math.min(c.confidence, 50)
+          : c.confidence,
         created_by_role: "claim_extractor",
       });
-      for (const id of c.evidence_ids)
+      for (const link of c.evidence_links)
         await s.put(
           "claim_evidence",
-          { claim_id: row.id, evidence_id: id, relation: "supports" },
+          { claim_id: row.id, ...link },
           "claim_id,evidence_id,relation",
         );
     }
@@ -236,7 +268,15 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
           evidence_id: id,
         });
     }
-    await s.enqueue("DISCOVER", run!.id + ":DISCOVER", {}, run!.id);
+    if (run!.config_snapshot.concept_id) {
+      await s.one("product_concepts", run!.config_snapshot.concept_id);
+      await s.enqueue(
+        "ANALYZE",
+        run!.id + ":ANALYZE:" + run!.config_snapshot.concept_id,
+        { concept_id: run!.config_snapshot.concept_id },
+        run!.id,
+      );
+    } else await s.enqueue("DISCOVER", run!.id + ":DISCOVER", {}, run!.id);
     return { claims: result.claims.length, signals: result.signals.length };
   }
   if (job.job_type === "DISCOVER") {
@@ -280,7 +320,7 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         ),
       ],
     };
-    const existing = await s.list("opportunities", {}, 1000);
+    const existing: Row[] = []; // Exact and semantic candidates are fetched by indexed queries.
     const concepts: string[] = [];
     const allowed = new Set(evidence.map((e) => e.id));
     for (const [i, o] of result.opportunities.entries()) {
@@ -319,9 +359,17 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         embedding: dedupe.embedding,
         confidence: Math.min(...signals.map((x) => Number(x.confidence)), 60),
       });
-      const edges = await s.list("signal_evidence", {}, 1000);
+      const { data: edges, error: edgesError } = await s.db
+        .from("signal_evidence")
+        .select("*")
+        .eq("owner_id", s.owner)
+        .in(
+          "signal_id",
+          signals.map((sig) => sig.id),
+        );
+      if (edgesError) throw Error(edgesError.message);
       for (const sig of signals.filter((sig) =>
-        edges.some(
+        (edges || []).some(
           (edge) =>
             edge.signal_id === sig.id &&
             o.evidence_ids.includes(edge.evidence_id),
@@ -351,7 +399,7 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         },
       });
       for (const c of o.concepts.slice(0, 1)) {
-        const candidates = await s.list("product_concepts", {
+        const candidates = await s.all("product_concepts", {
           opportunity_id: opp.id,
         });
         const decision = await cached(
@@ -398,12 +446,12 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         );
       }
     }
-    await s.update("research_runs", run!.id, {
-      stats: {
-        ...run!.stats,
-        concept_ids: concepts,
-        concepts: concepts.length,
-      },
+    await s.rpc("center_merge_run_concepts", {
+      p_owner: s.owner,
+      p_run: run!.id,
+      p_job: job.id,
+      p_attempt: job.attempt_count,
+      p_concepts: concepts,
     });
     return { concepts: concepts.length };
   }
@@ -419,6 +467,7 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         env,
         "market_analyst",
         analysisSchema.extend({
+          market_code: z.literal(run!.config_snapshot.market),
           factors: z.object(
             Object.fromEntries(
               Object.keys(weights).map((k) => [k, factorSchema]),
@@ -430,13 +479,35 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
           opportunity,
           evidence: evidenceContext(evidence),
           weights,
+          factor_rubrics: Object.fromEntries(
+            Object.keys(weights).map((k) => [k, factorRubrics[k]]),
+          ),
+          scoring_rubric_version: scoringRubricVersion,
           market: run!.config_snapshot.market,
         },
-        "Deep analysis. Return exactly the supplied factor keys. Every factual assessment must reference supplied evidence IDs. For a factor with no supporting source, return evidence_ids:[] and explicitly state the uncertainty; do not invent a reference. Competitor identities require real sources. Competitors include direct, indirect and substitutes only if supported. Empty review_clusters when no actual review sample exists; listing counts are not analyzed reviews. Confidence must reflect missing user voice, no measured growth history, and no revenue data. Do not promote a concept on speculative economics. Evaluate all hard kill rules: prohibited, unavailable_dependency, unsustainable_economics, no_credible_wedge, solo_maintenance, platform_policy, safety_liability. Unsupported differentiation is unknown, pure clones fail no_credible_wedge. Unknown critical dependencies belong in critical_unknowns. Be specific in gap, monetization, distribution and executive brief.",
+        "Deep analysis. Return exactly the supplied factor keys. Every normalized factor is FAVORABLE: use factor_rubrics (including inverse content burden and competition attractiveness), never score competitive pressure as a benefit. Every factual assessment must reference supplied evidence IDs. For a factor with no supporting source, return evidence_ids:[] and explicitly state the uncertainty; do not invent a reference. Competitor identities require real sources and http(s) URLs. Competitors include direct, indirect and substitutes only if supported. Empty review_clusters when no actual review sample exists; listing counts are not analyzed reviews. Confidence must reflect missing user voice, no measured growth history, and no revenue data. Do not promote a concept on speculative economics. Evaluate EXACTLY ONCE all seven hard kill rules: prohibited, unavailable_dependency, unsustainable_economics, no_credible_wedge, solo_maintenance, platform_policy, safety_liability. Every severity is hard (a rule category, not the outcome); pass/fail requires evidence, unknown can have empty evidence_ids with an explicit uncertainty explanation. Unsupported differentiation is unknown, pure clones fail no_credible_wedge. Unknown critical dependencies belong in critical_unknowns. Be specific in gap, monetization, distribution and executive brief.",
         job,
+        (output) =>
+          validateAnalysisEvidence(
+            output,
+            evidence.map((e) => ({ id: e.id, source_type: e.source_type })),
+          ),
       ),
     );
+    validateAnalysisEvidence(
+      result,
+      evidence.map((e) => ({ id: e.id, source_type: e.source_type })),
+    );
+    const writes = new AnalysisWrites(s);
     const allowed = new Set(evidence.map((e) => e.id));
+    const evidenceIds = evidence.map((e) => e.id);
+    const { data: contradictions, error: contradictionError } = await s.db
+      .from("claim_evidence")
+      .select("evidence_id")
+      .eq("owner_id", s.owner)
+      .eq("relation", "contradicts")
+      .in("evidence_id", evidenceIds);
+    if (contradictionError) throw Error(contradictionError.message);
     for (const f of Object.values(result.factors)) {
       if (f.evidence_ids.length) assertEvidence(f.evidence_ids, allowed);
       else {
@@ -450,6 +521,9 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
     const score = weighted(values, weights);
     const components = {
       ...result.confidence,
+      agreement: contradictions?.length
+        ? Math.min(result.confidence.agreement, 50)
+        : result.confidence.agreement,
       coverage: Math.min(
         result.confidence.coverage,
         result.review_clusters.length ? 100 : 50,
@@ -469,7 +543,7 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         active: true,
       })
     )[0];
-    const scored = await s.put("score_snapshots", {
+    const scored = await writes.put("score_snapshots", {
       id: await stableId(job.id + ":score"),
       concept_id: concept.id,
       market_id: market?.id || null,
@@ -478,11 +552,12 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
       factors: {
         values,
         weights,
+        rubric_version: scoringRubricVersion,
         assessments: result.factors,
         analysis: result,
       },
     });
-    const confident = await s.put("confidence_snapshots", {
+    const confident = await writes.put("confidence_snapshots", {
       id: await stableId(job.id + ":confidence"),
       concept_id: concept.id,
       market_id: market?.id || null,
@@ -490,8 +565,9 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
       components,
     });
     for (const [i, r] of result.risks.entries()) {
-      assertEvidence(r.evidence_ids, allowed);
-      await s.put("kill_assessments", {
+      if (r.evidence_ids.length || r.result !== "unknown")
+        assertEvidence(r.evidence_ids, allowed);
+      await writes.put("kill_assessments", {
         id: await stableId(job.id + ":risk:" + i),
         concept_id: concept.id,
         rule_key: r.rule,
@@ -506,11 +582,17 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
       score,
       confidence,
       result.risks.some((r) => r.severity === "hard" && r.result === "fail"),
-      result.critical_unknowns,
+      [
+        ...result.critical_unknowns,
+        ...result.risks
+          .filter((r) => r.result === "unknown")
+          .map((r) => r.rule),
+      ],
     );
-    await s.put("recommendations", {
+    await writes.put("recommendations", {
       id: await stableId(job.id + ":rec"),
       concept_id: concept.id,
+      research_job_id: job.id,
       market_id: market?.id || null,
       score_snapshot_id: scored.id,
       confidence_snapshot_id: confident.id,
@@ -526,14 +608,14 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
     });
     for (const [i, c] of result.competitors.entries()) {
       assertEvidence(c.evidence_ids, allowed);
-      const comp = await s.put("competitors", {
+      const comp = await writes.put("competitors", {
         id: await stableId(s.owner + normalize(c.name)),
         canonical_name: c.name,
         entity_type: "product",
         website: c.url,
         canonical_key: normalize(c.name),
       });
-      await s.put(
+      await writes.put(
         "concept_competitors",
         {
           concept_id: concept.id,
@@ -554,13 +636,14 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
           (normalize(e.title).includes(normalize(c.name)) ||
             normalize(c.name).includes(normalize(e.title))),
       );
-      await s.put("competitor_snapshots", {
+      await writes.put("competitor_snapshots", {
         id: await stableId(job.id + ":comp:" + i),
         competitor_id: comp.id,
         evidence_id: e?.id,
-        platform: "mobile",
-        rating: e?.raw_payload?.rating || null,
-        review_count: e?.raw_payload?.reviewCount || null,
+        platform: e?.raw_payload?.provenance?.platform || "unknown",
+        market_id: e?.market_id || null,
+        rating: e?.raw_payload?.rating ?? null,
+        review_count: e?.raw_payload?.reviewCount ?? null,
         price_summary:
           e?.raw_payload?.price === undefined
             ? null
@@ -580,7 +663,7 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
         throw Error("INVALID_REVIEW_EVIDENCE");
       const sample = evidence.filter((e) => e.source_type === "user_review");
       const memberIds = [...new Set(r.evidence_ids)];
-      const cluster = await s.put("review_clusters", {
+      const cluster = await writes.put("review_clusters", {
         id: await stableId(job.id + ":review:" + i),
         concept_id: concept.id,
         theme: r.theme,
@@ -594,26 +677,48 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
       for (const id of memberIds) {
         const item = (await s.list("review_items", { evidence_id: id }))[0];
         if (item)
-          await s.put(
+          await writes.put(
             "review_cluster_members",
             { cluster_id: cluster.id, review_item_id: item.id },
             "cluster_id,review_item_id",
           );
       }
     }
-    await s.update("product_concepts", concept.id, {
+    await writes.update("product_concepts", concept.id, {
       first_analyzed_at: concept.first_analyzed_at || stamp(),
       last_analyzed_at: stamp(),
       risks: result.risks,
     });
-    await s.put("opportunity_timeline_events", {
+    await writes.put("opportunity_timeline_events", {
       id: await stableId(job.id + ":timeline"),
       concept_id: concept.id,
       event_type: "score_changed",
       summary: "Analysis completed: " + score + "/100 · " + status,
       payload: { score, confidence, model: scoring.version },
     });
-    return { concept_id: concept.id, score, confidence, status };
+    const summary = {
+      concept_id: concept.id,
+      score,
+      confidence,
+      status,
+      committed: true,
+    };
+    for (const item of evidence)
+      await writes.put(
+        "concept_evidence",
+        { concept_id: concept.id, evidence_id: item.id, origin: "research" },
+        "concept_id,evidence_id",
+      );
+    if (job.research_run_id)
+      await s.rpc("center_merge_run_concepts", {
+        p_owner: s.owner,
+        p_run: job.research_run_id,
+        p_job: job.id,
+        p_attempt: job.attempt_count,
+        p_concepts: [concept.id],
+      });
+    await writes.commit(job, summary);
+    return summary;
   }
   if (job.job_type.startsWith("BLUEPRINT")) {
     const project = await s.one("projects", job.payload.project_id);
@@ -830,27 +935,15 @@ export async function processJob(s: Store, env: Env, job: Row): Promise<Row> {
       );
       const blueprint = blueprintSchema.parse({ ...job.payload.part, ...part });
       const bundle = documentBundle(blueprint, snapshot);
-      const version = await s.rpc("center_save_blueprint", {
-        p_owner: s.owner,
-        p_project: project.id,
-        p_expected: project.current_blueprint_version_id,
-        p_bundle: bundle,
-        p_summary: "Generated from frozen research",
-      });
-      await s.enqueue("BLUEPRINT_REVIEW", version + ":REVIEW", {
-        project_id: project.id,
-        version_id: version,
-      });
       const report = reviewedQuality(bundle, null);
-      await s.insert("quality_reports", {
-        project_id: project.id,
-        blueprint_version_id: version,
-        ...report,
+      const version = await s.rpc("center_save_generated_blueprint", {
+        p_owner: s.owner,
+        p_job: job.id,
+        p_attempt: job.attempt_count,
+        p_bundle: bundle,
+        p_report: report,
       });
-      await s.update("projects", project.id, {
-        status: report.mandatory_pass ? "prototype_ready" : "quality_blocked",
-      });
-      return { version, quality: report };
+      return { version, quality: report, committed: true };
     }
   }
   throw Error("UNKNOWN_JOB_TYPE");
@@ -886,7 +979,7 @@ async function finalize(s: Store, runId: string) {
   });
   const results = jobs
     .filter((j) => j.job_type === "ANALYZE" && j.status === "succeeded")
-    .map((j) => j.result_ref)
+    .map((j) => ({ ...j.result_ref, job_id: j.id }))
     .sort((a, b) => b.score - a.score);
   const eligible = results.find(
     (x) =>
@@ -901,7 +994,15 @@ async function finalize(s: Store, runId: string) {
   if (!existing?.promoted) {
     const rec = eligible
       ? (
-          await s.list("recommendations", { concept_id: eligible.concept_id })
+          await s.list(
+            "recommendations",
+            {
+              concept_id: eligible.concept_id,
+              research_job_id: eligible.job_id,
+            },
+            1,
+            { order: "created_at" },
+          )
         ).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
       : null;
     await s.put(
@@ -936,32 +1037,29 @@ export async function tick(env: Env) {
     const s = new Store(db, job.owner_id);
     try {
       const result = await processJob(s, env, job);
-      await s.rpc("center_finish_attempt", {
-        p_job: job.id,
-        p_queue: queue,
-        p_message: job.message_id,
-        p_attempt: job.attempt_count,
-        p_result: result,
-      });
+      if (!result.committed)
+        await s.rpc("center_finish_attempt", {
+          p_job: job.id,
+          p_queue: queue,
+          p_message: job.message_id,
+          p_attempt: job.attempt_count,
+          p_result: result,
+        });
     } catch (e) {
-      const code = (e instanceof Error ? e.message : "WORKER_ERROR").slice(
-        0,
-        180,
-      );
+      const error = jobError(e);
+      const code = error.message.slice(0, 180);
       console.error(
         JSON.stringify({ event: "job_failed", job_id: job.id, code }),
       );
-      await s.rpc("center_finish_attempt", {
+      await s.rpc("center_fail_attempt", {
         p_job: job.id,
         p_queue: queue,
         p_message: job.message_id,
         p_attempt: job.attempt_count,
         p_result: null,
         p_error: code,
-        p_retry:
-          /TIMEOUT|NETWORK|HTTP_5|RATE_LIMIT|AI_SCHEMA_INVALID|AI_JSON_INVALID|UNSUPPORTED_EVIDENCE_REFERENCE/i.test(
-            code,
-          ),
+        p_retry: retryable(error),
+        p_retry_seconds: retryDelay(job.attempt_count, error),
       });
     }
     if (job.research_run_id) await finalize(s, job.research_run_id);

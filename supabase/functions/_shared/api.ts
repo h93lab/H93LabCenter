@@ -1,15 +1,18 @@
 import { z } from "zod";
 import { figmaReceiptSchema, fileHandoff } from "./figma.ts";
-import { zipSync, strToU8 } from "fflate";
+import { buildExportPackage } from "./export-package.ts";
+import {
+  decisionList,
+  compareIdeas,
+  decisionDetail,
+  validationList,
+  saveValidation,
+} from "./decision.ts";
+import { previewReviewImport, importReviews } from "./source-import.ts";
 import { Store, admin, type Env, type Row } from "./store.ts";
 import { models } from "./ai.ts";
 import {
-  documentBundle,
-  blueprintSchema,
-  quality,
   reviewedQuality,
-  sha,
-  safePath,
   scheduleDue,
   localDate,
   type Bundle,
@@ -47,15 +50,24 @@ const tableMap: Record<
   recommendations: { table: "recommendations", sort: "created_at" },
   timeline: { table: "opportunity_timeline_events", sort: "occurred_at" },
   promotions: { table: "daily_promotions", sort: "promotion_date" },
+  confidences: { table: "confidence_snapshots", sort: "calculated_at" },
 };
 export async function startRun(s: Store, input: Row) {
   const settings = (await s.list("app_settings"))[0];
   if (!settings) throw Error("OWNER_BOOTSTRAP_MISSING");
+  const targetMarket = String(input.market || "GLOBAL").toUpperCase();
+  const marketCheck = await s.db
+    .from("markets")
+    .select("id")
+    .eq("code", targetMarket)
+    .maybeSingle();
+  if (marketCheck.error || !marketCheck.data) throw Error("UNKNOWN_MARKET");
   const marketPreferences = await s.list("owner_market_preferences");
   const cfg = {
     market_preferences: marketPreferences,
     ...settings.research_config,
     ...input,
+    market: targetMarket,
     timezone: settings.timezone,
     allocation: {
       apps: settings.apps_allocation,
@@ -69,14 +81,23 @@ export async function startRun(s: Store, input: Row) {
   if (!enabled.some((x) => supportedSources.includes(x.key)))
     throw Error("NO_SUPPORTED_SOURCES");
   const key = input.request_key || crypto.randomUUID();
+  const configuredBudget = Number(
+    input.run_budget ?? settings.research_config?.run_budget ?? 0.5,
+  );
+  if (
+    !Number.isFinite(configuredBudget) ||
+    configuredBudget < 0 ||
+    configuredBudget > 10
+  )
+    throw Error("INVALID_RUN_BUDGET");
+  cfg.run_budget = configuredBudget;
+  if (input.concept_id)
+    await s.one("product_concepts", uuid.parse(input.concept_id));
   return s.rpc("center_start_run", {
     p_owner: s.owner,
     p_key: key,
     p_config: cfg,
-    p_budget: Math.min(
-      Number(settings.research_config?.run_budget) || 0.5,
-      settings.daily_ai_budget_usd,
-    ),
+    p_budget: Math.min(configuredBudget, settings.daily_ai_budget_usd),
     p_mode: input.mode || "manual",
   });
 }
@@ -167,16 +188,18 @@ async function idea(s: Store, id: string) {
     reviews,
     timeline,
   ] = await Promise.all([
-    s.list("score_snapshots", { concept_id: id }),
-    s.list("confidence_snapshots", { concept_id: id }),
-    s.list("recommendations", { concept_id: id }),
-    s.list("kill_assessments", { concept_id: id }),
-    s.list("concept_competitors", { concept_id: id }),
-    s.list("review_clusters", { concept_id: id }),
-    s.list("opportunity_timeline_events", { concept_id: id }),
+    s.all("score_snapshots", { concept_id: id }, "calculated_at"),
+    s.all("confidence_snapshots", { concept_id: id }, "calculated_at"),
+    s.all("recommendations", { concept_id: id }, "created_at"),
+    s.all("kill_assessments", { concept_id: id }),
+    s.all("concept_competitors", { concept_id: id }, "competitor_id"),
+    s.all("review_clusters", { concept_id: id }),
+    s.all("opportunity_timeline_events", { concept_id: id }, "occurred_at"),
   ]);
   scores.sort((a, b) => b.calculated_at.localeCompare(a.calculated_at));
   recommendations.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  confidence.sort((a, b) => b.calculated_at.localeCompare(a.calculated_at));
+  timeline.reverse();
   const evidenceIds = [
     ...new Set(recommendations.flatMap((x) => x.strongest_evidence_ids || [])),
   ];
@@ -191,9 +214,14 @@ async function idea(s: Store, id: string) {
     relations.map(async (r) => ({
       ...(await s.one("competitors", r.competitor_id)),
       ...r,
-      snapshots: await s.list("competitor_snapshots", {
-        competitor_id: r.competitor_id,
-      }),
+      snapshots: await s.list(
+        "competitor_snapshots",
+        {
+          competitor_id: r.competitor_id,
+        },
+        100,
+        { order: "captured_at" },
+      ),
     })),
   );
   return {
@@ -211,19 +239,65 @@ async function idea(s: Store, id: string) {
 }
 async function project(s: Store, id: string) {
   const p = await s.one("projects", id);
-  const versions = await s.list("blueprint_versions", { project_id: id });
+  const versions = await s.all(
+    "blueprint_versions",
+    { project_id: id },
+    "version_number",
+  );
   versions.sort((a, b) => b.version_number - a.version_number);
   return {
     project: p,
     versions,
     version: versions.find((v) => v.id === p.current_blueprint_version_id),
-    quality: await s.list("quality_reports", { project_id: id }),
-    changes: await s.list("change_requests", { project_id: id }),
-    prototypes: await s.list("prototype_artifacts", { project_id: id }),
-    exports: await s.list("export_packages", { project_id: id }),
+    quality: await s.list("quality_reports", { project_id: id }, 100, {
+      order: "created_at",
+    }),
+    changes: await s.list("change_requests", { project_id: id }, 100, {
+      order: "requested_at",
+    }),
+    prototypes: await s.all("prototype_artifacts", { project_id: id }),
+    exports: await s.list("export_packages", { project_id: id }, 100, {
+      order: "created_at",
+    }),
   };
 }
 const uuid = z.string().uuid();
+async function storeExport(s: Store, p: Row, version: Row, env: Env) {
+  const prepared = await buildExportPackage(
+    p,
+    version,
+    [env.OPENROUTER_API_KEY, env.SUPABASE_SECRET_KEY, env.WORKER_SECRET].filter(
+      Boolean,
+    ) as string[],
+  );
+  const storagePath = `${s.owner}/${p.id}/blueprint-v${version.version_number}-${crypto.randomUUID()}.zip`;
+  const bucket = s.db.storage.from("blueprint-exports");
+  const uploaded = await bucket.upload(storagePath, prepared.archive, {
+    contentType: "application/zip",
+  });
+  if (uploaded.error) throw Error("EXPORT_STORAGE_FAILED");
+  try {
+    const signed = await bucket.createSignedUrl(storagePath, 300);
+    if (signed.error) throw Error("EXPORT_URL_FAILED");
+    const record = await s.insert("export_packages", {
+      project_id: p.id,
+      blueprint_version_id: version.id,
+      storage_path: storagePath,
+      manifest: prepared.manifest,
+      archive_checksum: prepared.archive_checksum,
+    });
+    const download = new URL(signed.data.signedUrl);
+    if (env.PUBLIC_SUPABASE_URL) {
+      const publicBase = new URL(env.PUBLIC_SUPABASE_URL);
+      download.protocol = publicBase.protocol;
+      download.host = publicBase.host;
+    }
+    return { url: download.toString(), manifest: prepared.manifest, record };
+  } catch (e) {
+    await bucket.remove([storagePath]);
+    throw e;
+  }
+}
 export async function handle(req: Request, env: Env): Promise<Response> {
   const origin = req.headers.get("origin");
   const headers: Record<string, string> = {
@@ -314,11 +388,17 @@ export async function handle(req: Request, env: Env): Promise<Response> {
           "recommendations",
           "promotions",
           "scores",
+          "confidences",
         ].map((key) => rows(s, key, new URL("http://local/"))),
       );
       const settings = (await s.list("app_settings"))[0];
       return send({
         local_date: localDate(settings.timezone),
+        settings: {
+          idea_of_day_min_score: settings.idea_of_day_min_score,
+          idea_of_day_min_confidence: settings.idea_of_day_min_confidence,
+          timezone: settings.timezone,
+        },
         ...Object.fromEntries(
           [
             "ideas",
@@ -329,11 +409,60 @@ export async function handle(req: Request, env: Env): Promise<Response> {
             "recommendations",
             "promotions",
             "scores",
+            "confidences",
           ].map((k, i) => [k, results[i]]),
         ),
       });
     }
     const parts = path.split("/").filter(Boolean);
+    if (path === "/evidence/import/preview" && req.method === "POST")
+      return send(previewReviewImport(body));
+    if (
+      parts[0] === "ideas" &&
+      parts[2] === "evidence" &&
+      parts[3] === "import" &&
+      req.method === "POST"
+    )
+      return send(await importReviews(s, parts[1], body));
+    if (path === "/decisions" && req.method === "GET")
+      return send(await decisionList(s, url));
+    if (path === "/decisions/compare" && req.method === "GET")
+      return send(await compareIdeas(s, url.searchParams.get("ids") || ""));
+    if (parts[0] === "ideas" && parts[2] === "decision" && req.method === "GET")
+      return send(await decisionDetail(s, uuid.parse(parts[1])));
+    if (parts[0] === "ideas" && parts[2] === "validations") {
+      if (req.method === "GET")
+        return send(await validationList(s, uuid.parse(parts[1])));
+      if (req.method === "POST")
+        return send(await saveValidation(s, uuid.parse(parts[1]), body));
+    }
+    if (
+      parts[0] === "ideas" &&
+      parts[2] === "refresh" &&
+      req.method === "POST"
+    ) {
+      const concept = await s.one("product_concepts", uuid.parse(parts[1]));
+      const input = z
+        .object({
+          market: z.string().min(2).max(10),
+          run_budget: z.number().min(0).max(10),
+          request_key: uuid,
+          query: z.string().min(2).max(120).optional(),
+        })
+        .strict()
+        .parse(body);
+      return send(
+        {
+          id: await startRun(s, {
+            ...input,
+            query: input.query || concept.title.slice(0, 120),
+            concept_id: concept.id,
+            mode: "manual",
+          }),
+        },
+        202,
+      );
+    }
     if (parts[0] === "table" && req.method === "GET")
       return send(await rows(s, parts[1], url));
     if (
@@ -399,6 +528,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
           market: z.string().min(2).max(10),
           request_key: uuid,
           max_items: z.number().int().min(1).max(25).default(12),
+          run_budget: z.number().min(0).max(10).optional(),
         })
         .parse(body);
       return send({ id: await startRun(s, input) }, 202);
@@ -546,19 +676,70 @@ export async function handle(req: Request, env: Env): Promise<Response> {
       if (parts[2] === "validate" || parts[2] === "publish") {
         if (p.current_blueprint_version_id !== version.id)
           throw Error("VERSION_CONFLICT");
-        const report = reviewedQuality(bundle, version.consistency_review);
+        const baseReport = reviewedQuality(bundle, version.consistency_review);
+        let exportError: string | null = null;
+        try {
+          await buildExportPackage(
+            p,
+            version,
+            [
+              env.OPENROUTER_API_KEY,
+              env.SUPABASE_SECRET_KEY,
+              env.WORKER_SECRET,
+            ].filter(Boolean) as string[],
+          );
+        } catch (e) {
+          exportError =
+            e instanceof Error && /^[A-Z_0-9]+$/.test(e.message)
+              ? e.message
+              : "EXPORT_INVALID";
+        }
+        const exportGate = {
+          id: "EXPORT",
+          name: "Export package integrity",
+          pass: !exportError,
+          reason: exportError
+            ? exportError.replaceAll("_", " ").toLowerCase()
+            : "Required files, links, checksums and all generated content passed the export scan.",
+        };
+        const gates = [...baseReport.gates, exportGate];
+        const report = {
+          ...baseReport,
+          gates,
+          mandatory_pass: gates.every((g) => g.pass),
+          findings: gates.filter((g) => !g.pass),
+          overall_score: Math.round(
+            (gates.filter((g) => g.pass).length / gates.length) * 100,
+          ),
+        };
         await s.insert("quality_reports", {
           project_id: p.id,
           blueprint_version_id: version.id,
           ...report,
         });
-        if (parts[2] === "publish")
-          await s.rpc("center_publish", {
-            p_owner: s.owner,
-            p_project: p.id,
-            p_version: version.id,
-            p_report: report,
-          });
+        if (parts[2] === "publish") {
+          if (!report.mandatory_pass)
+            throw Error(exportError || "QUALITY_BLOCKED");
+          const prepared = await storeExport(s, p, version, env);
+          try {
+            await s.rpc("center_publish", {
+              p_owner: s.owner,
+              p_project: p.id,
+              p_version: version.id,
+              p_report: report,
+            });
+          } catch (e) {
+            await db
+              .from("export_packages")
+              .delete()
+              .eq("owner_id", s.owner)
+              .eq("id", prepared.record.id);
+            await db.storage
+              .from("blueprint-exports")
+              .remove([prepared.record.storage_path]);
+            throw e;
+          }
+        }
         return send(report);
       }
       if (parts[2] === "figma")
@@ -571,79 +752,8 @@ export async function handle(req: Request, env: Env): Promise<Response> {
         });
       if (!["published", "superseded"].includes(version.status))
         throw Error("PUBLISH_BEFORE_EXPORT");
-      const files: Record<string, Uint8Array> = {};
-      const manifest: Row = {
-        project_id: p.id,
-        project: p.name,
-        slug: p.slug,
-        source_concept_id: p.concept_id,
-        version: version.version_number,
-        version_id: version.id,
-        generated_at: new Date().toISOString(),
-        schema_version: "1.0",
-        prototype_version: version.id,
-        quality: reviewedQuality(bundle, version.consistency_review),
-        compatible_agents: ["Claude Code", "Codex", "Kimi", "Gemini CLI"],
-        flutter_version_policy:
-          "Latest stable at implementation time unless a version is justified in the technical plan",
-        files: [],
-      };
-      for (const d of bundle.documents) {
-        safePath(d.path);
-        if (/sk-or-v1-|sb_secret_|-----BEGIN.*PRIVATE KEY/.test(d.content_md))
-          throw Error("EXPORT_SECRET_DETECTED");
-        files[d.path] = strToU8(d.content_md);
-        manifest.files.push({ path: d.path, sha256: await sha(d.content_md) });
-      }
-      files["prototype/prototype.json"] = strToU8(
-        JSON.stringify(bundle.prototype, null, 2),
-      );
-      files["prototype/figma-handoff.json"] = strToU8(
-        JSON.stringify({
-          project_id: p.id,
-          project_name: p.name,
-          version_id: version.id,
-          ...bundle.prototype,
-        }),
-      );
-      for (const path of [
-        "prototype/prototype.json",
-        "prototype/figma-handoff.json",
-      ])
-        manifest.files.push({ path, sha256: await sha(files[path]) });
-      files["MANIFEST.json"] = strToU8(JSON.stringify(manifest, null, 2));
-      const archive = zipSync(files, { level: 6 });
-      const storagePath =
-        s.owner +
-        "/" +
-        p.id +
-        "/blueprint-v" +
-        version.version_number +
-        "-" +
-        crypto.randomUUID() +
-        ".zip";
-      const uploaded = await db.storage
-        .from("blueprint-exports")
-        .upload(storagePath, archive, { contentType: "application/zip" });
-      if (uploaded.error) throw Error("EXPORT_STORAGE_FAILED");
-      const signed = await db.storage
-        .from("blueprint-exports")
-        .createSignedUrl(storagePath, 300);
-      if (signed.error) throw Error("EXPORT_URL_FAILED");
-      await s.insert("export_packages", {
-        project_id: p.id,
-        blueprint_version_id: version.id,
-        storage_path: storagePath,
-        manifest,
-        archive_checksum: await sha(archive),
-      });
-      const download = new URL(signed.data.signedUrl);
-      if (env.PUBLIC_SUPABASE_URL) {
-        const publicBase = new URL(env.PUBLIC_SUPABASE_URL);
-        download.protocol = publicBase.protocol;
-        download.host = publicBase.host;
-      }
-      return send({ url: download.toString(), manifest });
+      const exported = await storeExport(s, p, version, env);
+      return send({ url: exported.url, manifest: exported.manifest });
     }
     if (path === "/settings" && req.method === "PATCH") {
       const schema = z
@@ -695,7 +805,9 @@ export async function handle(req: Request, env: Env): Promise<Response> {
         .object({
           primary_model: z.string().min(1),
           enabled: z.boolean(),
-          max_cost_per_call_usd: z.number().min(0.001).max(5),
+          max_cost_per_call_usd: z.number().min(0).max(5),
+          daily_budget_usd: z.number().min(0).max(100).nullable(),
+          daily_call_limit: z.number().int().min(1).max(10000),
           fallback_models: z.array(z.string()).max(3),
           settings: z.object({
             temperature: z.number().min(0).max(2),

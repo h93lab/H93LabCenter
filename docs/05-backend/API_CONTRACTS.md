@@ -86,3 +86,16 @@ Do not prematurely build a GraphQL/custom API layer.
 ## Concurrency
 
 Mutation operations include expected current version/state where relevant. Use database constraints/transactions to reject stale mutations.
+
+## Approved decision workspace extensions (2026-09-08)
+
+All routes require the authenticated owner, use the same response envelope, and reject cross-owner references.
+
+- `GET /decisions`: `q,market,category,kind,opportunity_type,recommendation,disposition,min_score,min_confidence,from,to,sort,page`. Filters and ordering execute before 30-row pagination. Recommendation, score and confidence are paired by snapshot IDs.
+- `GET /decisions/compare?ids=<2–3 distinct concept UUIDs>`: sourced assessments, context and comparability warning.
+- `GET /ideas/:id/decision`: market assessments, competitor snapshots/changes, source coverage, claim relationships, next validation step and recorded validations.
+- `POST /ideas/:id/refresh`: `{market,query?,run_budget,request_key}`; reuses this concept and includes linked imported evidence. Published Blueprints remain frozen.
+- `GET/POST /ideas/:id/validations`: POST accepts `{request_key,question,method,success_criterion,estimated_hours,estimated_cost_usd,outcome,result,evidence_ids,observed_at}`. Outcome is planned/supported/rejected/inconclusive; completed observations require a result and owned evidence. Replays preserve the first payload.
+- `POST /evidence/import/preview` and `POST /ideas/:id/evidence/import`: `{format:csv|json,content,source_name,source_url,market,platform,language,sampled_at,confirmed_real_reviews:true,dataset_kind:real,request_key?}`. Preview does not write. Import requires request_key, validates up to 100 reviews and deduplicates immutable evidence. Required row fields: external_id,text,published_at,url,app_id; optional title,rating. Owner provenance is explicitly not independent verification.
+- `PATCH /roles/:id`: additionally supports `daily_budget_usd:null|number` and `daily_call_limit:1..10000`. Zero per-call, role, run or workspace spend remains zero.
+- Validate now includes export integrity; publish additionally requires successful private Storage creation. Missing files, broken archive links, duplicate paths or secrets in any document/JSON/manifest block publication.
