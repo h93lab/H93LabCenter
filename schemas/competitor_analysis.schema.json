@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CompetitorAnalysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "competitors",
+    "incumbent_pressure"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "competitors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "competitor_id",
+          "relation_type",
+          "positioning_summary",
+          "strengths",
+          "weaknesses",
+          "evidence_ids"
+        ],
+        "properties": {
+          "competitor_id": {
+            "type": "string"
+          },
+          "relation_type": {
+            "enum": [
+              "direct",
+              "indirect",
+              "substitute"
+            ]
+          },
+          "positioning_summary": {
+            "type": "string"
+          },
+          "strengths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "weaknesses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pricing_summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "download_estimate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "revenue_estimate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "estimate_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "incumbent_pressure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level",
+        "rationale",
+        "evidence_ids"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "extreme",
+            "unknown"
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

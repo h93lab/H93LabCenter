@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "evidence_ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verification": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "inferred",
+              "estimated",
+              "unknown"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "evidence_ids",
+          "text",
+          "verification",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "evidence_ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "SEARCH_GROWTH",
+              "SEARCH_DECLINE",
+              "SOCIAL_DISCUSSION_GROWTH",
+              "SOCIAL_DISCUSSION_DECLINE",
+              "REVIEW_VOLUME_GROWTH",
+              "REVIEW_VOLUME_DECLINE",
+              "RANKING_GROWTH",
+              "RANKING_DECLINE",
+              "DOWNLOAD_GROWTH_ESTIMATE",
+              "DOWNLOAD_DECLINE_ESTIMATE",
+              "REVENUE_GROWTH_ESTIMATE",
+              "REVENUE_DECLINE_ESTIMATE",
+              "CATEGORY_GROWTH",
+              "CATEGORY_DECLINE",
+              "NEGATIVE_REVIEW_CLUSTER",
+              "FEATURE_REQUEST_CLUSTER",
+              "PRICING_OBJECTION_CLUSTER",
+              "UX_FRICTION_CLUSTER",
+              "RELIABILITY_COMPLAINT_CLUSTER",
+              "LOCALIZATION_COMPLAINT_CLUSTER",
+              "PRIVACY_CONCERN_CLUSTER",
+              "SWITCHING_REASON_CLUSTER",
+              "POSITIVE_DELIGHT_CLUSTER",
+              "NEW_COMPETITOR",
+              "COMPETITOR_GROWTH",
+              "COMPETITOR_DECLINE",
+              "COMPETITOR_PRICE_CHANGE",
+              "COMPETITOR_MONETIZATION_CHANGE",
+              "COMPETITOR_FEATURE_LAUNCH",
+              "COMPETITOR_PLATFORM_EXPANSION",
+              "COMPETITOR_MARKET_EXPANSION",
+              "COMPETITOR_NEGLECT",
+              "NEW_TECHNOLOGY",
+              "NEW_API",
+              "NEW_DEVICE_CAPABILITY",
+              "OS_PLATFORM_CHANGE",
+              "APP_STORE_POLICY_CHANGE",
+              "THIRD_PARTY_API_CHANGE",
+              "AI_MODEL_CAPABILITY_CHANGE",
+              "AI_COST_CHANGE",
+              "LOCALIZATION_GAP",
+              "PRICE_GAP",
+              "BUSINESS_MODEL_GAP",
+              "PLATFORM_GAP",
+              "FEATURE_GAP",
+              "WORKFLOW_GAP",
+              "NICHE_GAP",
+              "DISTRIBUTION_GAP",
+              "REGULATORY_CHANGE",
+              "CULTURAL_BEHAVIOR_CHANGE",
+              "ECONOMIC_CHANGE",
+              "SEASONAL_PATTERN",
+              "NEWS_DRIVEN_SPIKE"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative",
+              "mixed",
+              "neutral"
+            ]
+          },
+          "strength": {
+            "type": "string",
+            "enum": [
+              "weak",
+              "moderate",
+              "strong",
+              "extreme"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "evidence_ids",
+          "title",
+          "summary",
+          "type",
+          "direction",
+          "strength",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "claims",
+    "signals"
+  ],
+  "additionalProperties": false
+}

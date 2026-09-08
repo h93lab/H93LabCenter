@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpportunityCandidates",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "opportunities"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "opportunities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "problem_statement",
+          "job_to_be_done",
+          "target_audience",
+          "why_now",
+          "opportunity_type",
+          "app_or_game",
+          "market_codes",
+          "signal_ids",
+          "evidence_ids",
+          "critical_unknowns"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "problem_statement": {
+            "type": "string"
+          },
+          "job_to_be_done": {
+            "type": "string"
+          },
+          "target_audience": {
+            "type": "string"
+          },
+          "why_now": {
+            "type": "string"
+          },
+          "opportunity_type": {
+            "enum": [
+              "ORIGINAL_INNOVATION",
+              "COMPETITOR_IMPROVEMENT",
+              "NICHE_SPECIALIZATION",
+              "LOCALIZATION_ARBITRAGE",
+              "BUSINESS_MODEL_INNOVATION",
+              "PLATFORM_EXPANSION",
+              "FEATURE_UNBUNDLING",
+              "FEATURE_BUNDLING",
+              "TREND_EXPLOITATION",
+              "WORKFLOW_REPLACEMENT"
+            ]
+          },
+          "app_or_game": {
+            "enum": [
+              "app",
+              "game"
+            ]
+          },
+          "category_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "market_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "signal_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "critical_unknowns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "initial_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      }
+    }
+  }
+}

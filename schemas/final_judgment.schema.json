@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinalJudgment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recommendation",
+    "rationale",
+    "strongest_evidence_ids",
+    "biggest_risk",
+    "validation_priorities"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "recommendation": {
+      "enum": [
+        "STRONG_BUILD",
+        "BUILD",
+        "VALIDATE_FIRST",
+        "WATCH",
+        "PASS",
+        "KILLED"
+      ]
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "strongest_evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "biggest_risk": {
+      "type": "string"
+    },
+    "validation_priorities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "watch_trigger": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

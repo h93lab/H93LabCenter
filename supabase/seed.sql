@@ -1,0 +1,1 @@
+-- Canonical catalogs are owned by the remote baseline migration.

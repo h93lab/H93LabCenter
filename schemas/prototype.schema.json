@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PrototypeSpec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_key",
+    "blueprint_version",
+    "tokens",
+    "screens",
+    "flows"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "project_key": {
+      "type": "string"
+    },
+    "blueprint_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "tokens": {
+      "type": "object"
+    },
+    "screens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stable_key",
+          "name",
+          "purpose",
+          "states",
+          "blocks",
+          "interactions"
+        ],
+        "properties": {
+          "stable_key": {
+            "type": "string",
+            "pattern": "^SCR-[0-9]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "device_profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "trace_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stable_key",
+          "steps"
+        ],
+        "properties": {
+          "stable_key": {
+            "type": "string",
+            "pattern": "^FLOW-[0-9]+$"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

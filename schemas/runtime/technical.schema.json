@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "architecture": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data_model": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "name",
+                "type",
+                "required",
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "persistence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retention": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sensitivity": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "fields",
+          "relationships",
+          "persistence",
+          "retention",
+          "sensitivity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "integrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "auth": {
+            "type": "string",
+            "minLength": 1
+          },
+          "boundary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "failure_retry": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limits": {
+            "type": "string",
+            "minLength": 1
+          },
+          "platform_configuration": {
+            "type": "string",
+            "minLength": 1
+          },
+          "privacy": {
+            "type": "string",
+            "minLength": 1
+          },
+          "test_strategy": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "purpose",
+          "provider",
+          "alternatives",
+          "auth",
+          "boundary",
+          "failure_retry",
+          "limits",
+          "platform_configuration",
+          "privacy",
+          "test_strategy"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "analytics": {
+      "type": "string",
+      "minLength": 1
+    },
+    "security": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform_notes": {
+      "type": "string",
+      "minLength": 1
+    },
+    "design": {
+      "type": "string",
+      "minLength": 1
+    },
+    "monetization": {
+      "type": "string",
+      "minLength": 1
+    },
+    "aso": {
+      "type": "string",
+      "minLength": 1
+    },
+    "launch_validation": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "architecture",
+    "data_model",
+    "integrations",
+    "analytics",
+    "security",
+    "platform_notes",
+    "design",
+    "monetization",
+    "aso",
+    "launch_validation"
+  ],
+  "additionalProperties": false
+}

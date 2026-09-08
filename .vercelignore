@@ -1,0 +1,10 @@
+.env*
+.local
+supabase/.temp
+supabase/.branches
+server
+tests
+mobile-opportunity-platform-package
+mobile-opportunity-platform-kimi-k3-package.zip
+third_party
+.git

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProductConceptGeneration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "concepts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "value_proposition",
+          "target_user",
+          "wedge",
+          "mvp_thesis",
+          "monetization_candidates",
+          "distribution_candidates",
+          "risks",
+          "technical_dependencies",
+          "ai_dependency"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "value_proposition": {
+            "type": "string"
+          },
+          "target_user": {
+            "type": "string"
+          },
+          "wedge": {
+            "type": "string"
+          },
+          "differentiation_hypothesis": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mvp_thesis": {
+            "type": "string"
+          },
+          "monetization_candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "distribution_candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "technical_dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ai_dependency": {
+            "enum": [
+              "none",
+              "supporting",
+              "core"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

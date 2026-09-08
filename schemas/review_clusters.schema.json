@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewClusters",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sample_size",
+    "clusters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "sample_size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "theme",
+          "category",
+          "sentiment",
+          "member_item_ids",
+          "confidence"
+        ],
+        "properties": {
+          "theme": {
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "BUG_RELIABILITY",
+              "PERFORMANCE",
+              "UX_FRICTION",
+              "ONBOARDING_FRICTION",
+              "FEATURE_REQUEST",
+              "MISSING_INTEGRATION",
+              "PRICING_OBJECTION",
+              "ADS_OBJECTION",
+              "PAYWALL_FRICTION",
+              "LOCALIZATION",
+              "ACCESSIBILITY",
+              "PRIVACY_TRUST",
+              "CUSTOMER_SUPPORT",
+              "PLATFORM_GAP",
+              "OFFLINE_GAP",
+              "DELIGHT",
+              "SWITCHING_REASON",
+              "OTHER"
+            ]
+          },
+          "sentiment": {
+            "enum": [
+              "negative",
+              "positive",
+              "mixed",
+              "neutral"
+            ]
+          },
+          "member_item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "summary": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

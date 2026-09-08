@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "opportunities": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "problem": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jtbd": {
+            "type": "string",
+            "minLength": 1
+          },
+          "audience": {
+            "type": "string",
+            "minLength": 1
+          },
+          "why_now": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ORIGINAL_INNOVATION",
+              "COMPETITOR_IMPROVEMENT",
+              "NICHE_SPECIALIZATION",
+              "LOCALIZATION_ARBITRAGE",
+              "BUSINESS_MODEL_INNOVATION",
+              "PLATFORM_EXPANSION",
+              "FEATURE_UNBUNDLING",
+              "FEATURE_BUNDLING",
+              "TREND_EXPLOITATION",
+              "WORKFLOW_REPLACEMENT"
+            ]
+          },
+          "app_or_game": {
+            "type": "string",
+            "enum": [
+              "app",
+              "game"
+            ]
+          },
+          "evidence_ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          "concepts": {
+            "minItems": 1,
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value_proposition": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "target_user": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "wedge": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "mvp_thesis": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "monetization": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "distribution": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "title",
+                "value_proposition",
+                "target_user",
+                "wedge",
+                "mvp_thesis",
+                "monetization",
+                "distribution"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "title",
+          "problem",
+          "jtbd",
+          "audience",
+          "why_now",
+          "type",
+          "app_or_game",
+          "evidence_ids",
+          "concepts"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "opportunities"
+  ],
+  "additionalProperties": false
+}

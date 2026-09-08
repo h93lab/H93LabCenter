@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BlueprintChangePlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "normalized_request",
+    "impacts",
+    "prototype_impact",
+    "new_research_recommended",
+    "validation_checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "normalized_request": {
+      "type": "string"
+    },
+    "impacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_kind",
+          "artifact_key",
+          "action",
+          "reason",
+          "risk"
+        ],
+        "properties": {
+          "artifact_kind": {
+            "type": "string"
+          },
+          "artifact_key": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "add",
+              "update",
+              "remove",
+              "review",
+              "stale"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "risk": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "proposed_change": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "prototype_impact": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "new_research_recommended": {
+      "type": "boolean"
+    },
+    "research_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "validation_checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

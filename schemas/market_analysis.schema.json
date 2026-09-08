@@ -1,0 +1,441 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketAnalysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "market_code",
+    "factors",
+    "critical_unknowns"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "market_code": {
+      "type": "string"
+    },
+    "factors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "demand_strength",
+        "trend_momentum",
+        "problem_intensity",
+        "market_gap",
+        "monetization_attractiveness",
+        "distribution_feasibility",
+        "solo_developer_fit",
+        "technical_feasibility",
+        "localization_market_leverage",
+        "wedge_strength",
+        "competition_attractiveness"
+      ],
+      "properties": {
+        "demand_strength": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "trend_momentum": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "problem_intensity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "market_gap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "monetization_attractiveness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "distribution_feasibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "solo_developer_fit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "technical_feasibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "localization_market_leverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "wedge_strength": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "competition_attractiveness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "evidence_ids",
+            "unknowns"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "very_weak",
+                "weak",
+                "mixed",
+                "strong",
+                "very_strong",
+                "unknown"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unknowns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "critical_unknowns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
