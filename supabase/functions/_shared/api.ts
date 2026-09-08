@@ -323,10 +323,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   if (req.method === "OPTIONS")
     return new Response(null, { status: 204, headers });
   const url = new URL(req.url);
-  const path =
-    url.pathname
-      .replace(/^\/functions\/v1\/center|^\/api/, "")
-      .replace(/\/$/, "") || "/";
+  const path = normalizeApiPath(url.pathname);
   try {
     if (path === "/health")
       return send({ status: "ready", service: "H93Lab Center" });
@@ -929,4 +926,12 @@ export async function handle(req: Request, env: Env): Promise<Response> {
           : 400,
     );
   }
+}
+
+export function normalizeApiPath(pathname: string) {
+  return (
+    pathname
+      .replace(/^\/functions\/v1\/center|^\/center|^\/api/, "")
+      .replace(/\/$/, "") || "/"
+  );
 }
